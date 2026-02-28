@@ -2,12 +2,13 @@
 #include <windows.h>
 #include <cstdint>
 
+//RAM check - structure
 struct  MemoryStatus {
         uint64_t totalBytes;
         uint64_t availableBytes;
     };
 
-//RAM check
+//RAM reading
 MemoryStatus getRamStatus() {
     
     MemoryStatus status;
@@ -25,7 +26,7 @@ MemoryStatus getRamStatus() {
 int main() {
     std::cout << "System Resource Monitor started." << std::endl;
     
-    //RAM check and print
+    //RAM calculation and print
     MemoryStatus ram = getRamStatus();
     uint64_t usedBytes = (ram.totalBytes - ram.availableBytes);
     double ramPercent = (static_cast<double>(usedBytes) / ram.totalBytes) * 100;
