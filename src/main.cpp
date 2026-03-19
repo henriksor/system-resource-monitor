@@ -86,25 +86,27 @@ public:
 int main() {
     std::cout << "System Resource Monitor started." << std::endl;
     
-    // RAM calculation and print
-    MemoryStatus ram = getRamStatus();
-    uint64_t usedBytes = (ram.totalBytes - ram.availableBytes);
-    double ramPercent = (static_cast<double>(usedBytes) / ram.totalBytes) * 100;
-
-    std::cout << "Total GB is: " << (ram.totalBytes / 1024 / 1024 / 1024) << std::endl;
-    std::cout << "Available GB is: " << (ram.availableBytes / 1024 / 1024 / 1024) << std::endl;
-    std::cout << "Percent used: " << ramPercent << std::endl;
-
-    // CPU percentage calculation and print
+    // Warm-up
     CpuMonitor cpu;
+    cpu.getUsage();
+    Sleep(1000);
 
-    Sleep(1000); // Wait 1 second for first real check
-    double cpuPercent = cpu.getUsage(); // sets  the baseline
+    while(true) {
+        system("cls");
+        // RAM calculation and print
+        MemoryStatus ram = getRamStatus();
+        uint64_t usedBytes = (ram.totalBytes - ram.availableBytes);
+        double ramPercent = (static_cast<double>(usedBytes) / ram.totalBytes) * 100;
 
-    Sleep(1000); // wait 1 second betweeen checks
-    cpuPercent = cpu.getUsage(); // the messurement
+        std::cout << "Total GB is: " << (ram.totalBytes / 1024.0 / 1024.0 / 1024.0) << std::endl;
+        std::cout << "Available GB is: " << (ram.availableBytes / 1024.0 / 1024.0 / 1024.0) << std::endl;
+        std::cout << "Percent used: " << ramPercent << std::endl;
 
-    std::cout << "CPU Usage: " << cpuPercent << "%" << std::endl;
+        double cpuPercent = cpu.getUsage(); // CPU check
+
+        std::cout << "CPU Usage: " << cpuPercent << "%" << std::endl;
+        Sleep(1000);
+    };
 
     return 0;
 }
