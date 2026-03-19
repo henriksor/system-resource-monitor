@@ -2,20 +2,20 @@
 #include <windows.h>
 #include <cstdint>
 
-//RAM check - structure
+// RAM check - structure
 struct  MemoryStatus {
         uint64_t totalBytes;
         uint64_t availableBytes;
     };
 
-//CPU check -  structure
+// CPU check -  structure
 struct CpuTimes {
     uint64_t idle;
     uint64_t kernel;
     uint64_t user;
 };
 
-//RAM reading
+// RAM reading
 MemoryStatus getRamStatus() {
     
     MemoryStatus status;
@@ -86,19 +86,24 @@ public:
 int main() {
     std::cout << "System Resource Monitor started." << std::endl;
     
-    //RAM calculation and print
+    // RAM calculation and print
     MemoryStatus ram = getRamStatus();
     uint64_t usedBytes = (ram.totalBytes - ram.availableBytes);
     double ramPercent = (static_cast<double>(usedBytes) / ram.totalBytes) * 100;
+
     std::cout << "Total GB is: " << (ram.totalBytes / 1024 / 1024 / 1024) << std::endl;
     std::cout << "Available GB is: " << (ram.availableBytes / 1024 / 1024 / 1024) << std::endl;
     std::cout << "Percent used: " << ramPercent << std::endl;
 
+    // CPU percentage calculation and print
     CpuMonitor cpu;
+
     Sleep(1000); // Wait 1 second for first real check
-    double cpuPercent = cpu.getUsage();
+    double cpuPercent = cpu.getUsage(); // sets  the baseline
+
     Sleep(1000); // wait 1 second betweeen checks
-    cpuPercent = cpu.getUsage();
+    cpuPercent = cpu.getUsage(); // the messurement
+
     std::cout << "CPU Usage: " << cpuPercent << "%" << std::endl;
 
     return 0;
