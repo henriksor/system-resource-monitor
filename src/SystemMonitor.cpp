@@ -25,14 +25,12 @@ void SystemMonitor::run()
 
         std::cout << "CPU Usage: " << cpuPercent << " %\n\n";
 
-        std::cout << "Memory Usage:\n";
+        std::cout << "Memory Usage: " << mem.percentUsed << " %\n";
         std::cout << "Total: " << mem.totalBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
 
         std::cout << "Available: " << mem.availableBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
 
         std::cout << "Used: " << mem.usedBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
-
-        std::cout << "Percent: " << mem.percentUsed << " %\n";
 
         Sleep(1000);
     }
