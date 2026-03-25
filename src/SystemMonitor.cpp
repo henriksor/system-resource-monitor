@@ -10,6 +10,11 @@ void SystemMonitor::warmUp()
     Sleep(1000);
 }
 
+SystemMonitor::SystemMonitor()
+    : logger("logs/system_log.csv")
+{
+}
+
 void SystemMonitor::run()
 {
     warmUp();
@@ -31,6 +36,8 @@ void SystemMonitor::run()
         std::cout << "Available: " << mem.availableBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
 
         std::cout << "Used: " << mem.usedBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
+
+        logger.log(cpuPercent, mem.percentUsed, mem.usedBytes);
 
         Sleep(1000);
     }
