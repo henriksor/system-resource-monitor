@@ -10,6 +10,7 @@ add_executable(SystemResourceMonitor
     src/CpuMonitor.cpp
     src/MemoryMonitor.cpp
     src/Logger.cpp
+    src/AnomalyDetector.cpp
 )
 
 target_include_directories(SystemResourceMonitor

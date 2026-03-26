@@ -37,7 +37,14 @@ void SystemMonitor::run()
 
         std::cout << "Used: " << mem.usedBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
 
+        std::string alert = detector.check(cpuPercent, mem.percentUsed);
+
         logger.log(cpuPercent, mem.percentUsed, mem.usedBytes);
+
+        if (!alert.empty())
+        {
+            std::cout << alert << "\n";
+        }
 
         Sleep(1000);
     }
