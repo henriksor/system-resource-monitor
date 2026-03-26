@@ -1,11 +1,13 @@
 #pragma once
 #include <string>
+#include <vector>
 
 class AnomalyDetector {
 public:
-    std::string check(double cpuPercent, double ramPercent) const;
+    AnomalyDetector(double cpuThreshold, double ramThreshold);
+    std::vector<std::string> check(double cpuPercent, double ramPercent) const;
 
 private:
-    const double cpuThreshold = 85.0;
-    const double ramThreshold = 90.0;
+    const double cpuThreshold;
+    const double ramThreshold;
 };

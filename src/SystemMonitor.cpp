@@ -11,7 +11,8 @@ void SystemMonitor::warmUp()
 }
 
 SystemMonitor::SystemMonitor()
-    : logger("logs/system_log.csv")
+    : logger("logs/system_log.csv"),
+    detector(2.0, 2.0)   //for testing
 {
 }
 
@@ -37,11 +38,11 @@ void SystemMonitor::run()
 
         std::cout << "Used: " << mem.usedBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
 
-        std::string alert = detector.check(cpuPercent, mem.percentUsed);
-
         logger.log(cpuPercent, mem.percentUsed, mem.usedBytes);
 
-        if (!alert.empty())
+        auto alerts = detector.check(cpuPercent, mem.percentUsed);
+
+        for (const auto& alert : alerts)
         {
             std::cout << alert << "\n";
         }

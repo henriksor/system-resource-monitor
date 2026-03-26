@@ -1,12 +1,19 @@
 #include "AnomalyDetector.h"
 
-std::string AnomalyDetector::check(double cpuPercent, double ramPercent) const
+AnomalyDetector::AnomalyDetector(double cpuT, double ramT)
+    : cpuThreshold(cpuT), ramThreshold(ramT)
 {
+}
+
+std::vector<std::string> AnomalyDetector::check(double cpuPercent, double ramPercent) const
+{
+    std::vector<std::string> alerts;
+
     if (ramPercent > ramThreshold)
-        return "[WARNING] High RAM usage";
+        alerts.push_back("[WARNING] High RAM usage");
 
     if (cpuPercent > cpuThreshold)
-        return "[WARNING] High CPU usage";
+        alerts.push_back("[WARNING] High CPU usage");
 
-    return "";
+    return alerts;
 }
