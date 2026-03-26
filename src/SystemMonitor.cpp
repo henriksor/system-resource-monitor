@@ -12,7 +12,7 @@ void SystemMonitor::warmUp()
 
 SystemMonitor::SystemMonitor()
     : logger("logs/system_log.csv"),
-    detector(2.0, 2.0)   //for testing
+    detector(2.0, 2.0)   //for alert testing
 {
 }
 
