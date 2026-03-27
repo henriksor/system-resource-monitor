@@ -1,19 +1,24 @@
 #pragma once
-#include <string>
 #include <vector>
+#include <string>
 
 class AnomalyDetector {
 public:
-    AnomalyDetector(double cpuThreshold, double ramThreshold, double cpuSpikeThreshold, double ramSpikeThreshold);
+    AnomalyDetector(double cpuThreshold, double ramThreshold, double cpuSpikeThreshold, double ramSpikeThreshold, size_t historySize = 5);
+
     std::vector<std::string> check(double cpuPercent, double ramPercent);
 
 private:
-    double cpuThreshold;
-    double ramThreshold;
+    const double cpuThreshold;
+    const double ramThreshold;
 
-    double cpuSpikeThreshold;
-    double ramSpikeThreshold;
+    const double cpuSpikeThreshold;
+    const double ramSpikeThreshold;
 
-    double previousCpu = -1.0;
-    double previousRam = -1.0;
+    const size_t maxHistory;
+
+    std::vector<double> cpuHistory;
+    std::vector<double> ramHistory;
+
+    double calculateAverage(const std::vector<double>& values) const;
 };

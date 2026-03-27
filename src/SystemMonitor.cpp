@@ -12,7 +12,13 @@ void SystemMonitor::warmUp()
 
 SystemMonitor::SystemMonitor()
     : logger("logs/system_log.csv"),
-    detector(2.0, 2.0)   //for alert testing
+      detector(
+          80.0,   // CPU threshold
+          80.0,   // RAM threshold
+          10.0,   // CPU spike threshold
+          10.0,   // RAM spike threshold
+          5       // History size
+      )
 {
 }
 
