@@ -13,11 +13,13 @@ void SystemMonitor::warmUp()
 SystemMonitor::SystemMonitor()
     : logger("logs/system_log.csv"),
       detector(
-          80.0,   // CPU threshold
-          80.0,   // RAM threshold
-          10.0,   // CPU spike threshold
-          10.0,   // RAM spike threshold
-          5       // History size
+          80.0,  // cpu threshold
+          80.0,  // ram threshold
+          10.0,  // cpu spike
+          10.0,  // ram spike
+          15.0,  // cpu leak threshold
+          15.0,  // ram leak threshold
+          5      // history size
       )
 {
 }
