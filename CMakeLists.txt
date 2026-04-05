@@ -11,9 +11,16 @@ add_executable(SystemResourceMonitor
     src/MemoryMonitor.cpp
     src/Logger.cpp
     src/AnomalyDetector.cpp
+    src/ConfigManager.cpp
 )
 
 target_include_directories(SystemResourceMonitor
     PRIVATE
         ${CMAKE_SOURCE_DIR}/include
+)
+
+target_include_directories(SystemResourceMonitor
+    PRIVATE
+        include
+        external/json
 )

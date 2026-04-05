@@ -3,6 +3,7 @@
 #include <iomanip>
 
 #include "SystemMonitor.h"
+#include "ConfigManager.h"
 
 void SystemMonitor::warmUp()
 {
@@ -11,15 +12,16 @@ void SystemMonitor::warmUp()
 }
 
 SystemMonitor::SystemMonitor()
-    : logger("logs/system_log.csv"),
+    : config("config.json"),
+      logger(config.logFile()),
       detector(
-          80.0,  // cpu threshold
-          80.0,  // ram threshold
-          10.0,  // cpu spike
-          10.0,  // ram spike
-          15.0,  // cpu leak threshold
-          15.0,  // ram leak threshold
-          5      // history size
+          config.cpuThreshold(),
+          config.ramThreshold(),
+          config.cpuSpikeThreshold(),
+          config.ramSpikeThreshold(),
+          config.cpuLeakThreshold(),
+          config.ramLeakThreshold(),
+          config.historySize()
       )
 {
 }

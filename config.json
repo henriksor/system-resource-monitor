@@ -1,0 +1,16 @@
+{
+  "thresholds": {
+    "cpu": 80,
+    "ram": 80
+  },
+  "spike": {
+    "cpu": 10,
+    "ram": 10
+  },
+  "leak": {
+    "cpu": 15,
+    "ram": 15
+  },
+  "historySize": 5,
+  "logFile": "logs/system_log.csv"
+}

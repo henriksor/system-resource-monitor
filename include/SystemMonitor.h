@@ -15,6 +15,7 @@ private:
     MemoryMonitor memory;
     Logger logger;
     AnomalyDetector detector;
+    ConfigManager config;
 
     void warmUp();
 };
