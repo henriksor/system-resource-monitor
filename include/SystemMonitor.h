@@ -4,6 +4,7 @@
 #include "MemoryMonitor.h"
 #include "Logger.h"
 #include "AnomalyDetector.h"
+#include "ConfigManager.h"
 
 class SystemMonitor {
 public:

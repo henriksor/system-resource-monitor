@@ -1,6 +1,7 @@
 #pragma once
 #include <fstream>
 #include <string>
+#include <cstdint>
 
 class Logger {
 public:
