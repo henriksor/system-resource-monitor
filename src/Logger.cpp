@@ -15,7 +15,9 @@ Logger::~Logger()
         file.close();
 }
 
-void Logger::log(double cpuPercent, double ramPercent, uint64_t ramUsedBytes)
+void Logger::log(double cpuPercent, 
+                double ramPercent, 
+                uint64_t ramUsedBytes)
 {
     file << getTimestamp() << "," << cpuPercent << "," << ramPercent << "," << ramUsedBytes << "\n";
 }

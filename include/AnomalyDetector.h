@@ -5,7 +5,13 @@
 
 class AnomalyDetector {
 public:
-    AnomalyDetector(double cpuThreshold, double ramThreshold, double cpuSpikeThreshold, double ramSpikeThreshold, double cpuLeakThreshold, double ramLeakThreshold, size_t historySize = 5);
+    AnomalyDetector(double cpuThreshold, 
+                    double ramThreshold, 
+                    double cpuSpikeThreshold, 
+                    double ramSpikeThreshold, 
+                    double cpuLeakThreshold, 
+                    double ramLeakThreshold, 
+                    size_t historySize = 5);
 
     std::vector<std::string> check(double cpuPercent, double ramPercent);
 
