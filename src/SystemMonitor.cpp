@@ -1,14 +1,35 @@
 #include <iostream>
 #include <windows.h>
 #include <iomanip>
+#include <csignal>
 
 #include "SystemMonitor.h"
 #include "ConfigManager.h"
+
+// pointer used for Ctrl+C handling
+static SystemMonitor* instance = nullptr;
+
+// Windows console signal handler
+BOOL WINAPI consoleHandler(DWORD signal)
+{
+    if (signal == CTRL_C_EVENT && instance)
+    {
+        std::cout << "\nCtrl+C detected. Shutting down...\n";
+        instance->stop();
+        return TRUE;
+    }
+    return FALSE;
+}
 
 void SystemMonitor::warmUp()
 {
     cpu.getUsage();
     Sleep(1000);
+}
+
+void SystemMonitor::stop()
+{
+    running = false;
 }
 
 SystemMonitor::SystemMonitor()
@@ -28,11 +49,16 @@ SystemMonitor::SystemMonitor()
 
 void SystemMonitor::run()
 {
+    // Register Ctrl+C handler
+    instance = this;
+    SetConsoleCtrlHandler(consoleHandler, TRUE);
+    
     warmUp();
 
-    while (true)
+    while (running)
     {
-        system("cls");
+        // Clear screen using ANSI escape codes
+        std::cout << "\x1B[2J\x1B[H";
 
         auto mem = memory.getStatus();
         double cpuPercent = cpu.getUsage();
@@ -59,4 +85,5 @@ void SystemMonitor::run()
 
         Sleep(1000);
     }
+    std::cout << "System monitor stopped.\n";
 }
