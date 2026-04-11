@@ -1,24 +1,167 @@
 #include "AnomalyDetector.h"
 
-AnomalyDetector::AnomalyDetector(double cpuThreshold,
-                                 double ramThreshold,
-                                 double cpuSpikeThreshold,
-                                 double ramSpikeThreshold,
-                                 double cpuLeakThreshold,
-                                 double ramLeakThreshold,
-                                 size_t historySize)
-    : cpuThreshold(cpuThreshold),
-      ramThreshold(ramThreshold),
-      cpuSpikeThreshold(cpuSpikeThreshold),
-      ramSpikeThreshold(ramSpikeThreshold),
-      cpuLeakThreshold(cpuLeakThreshold),
-      ramLeakThreshold(ramLeakThreshold),
-      maxHistory(historySize)
+AnomalyDetector::AnomalyDetector(
+    double cpuT,
+    double ramT,
+    double cpuSpikeT,
+    double ramSpikeT,
+    double cpuLeakT,
+    double ramLeakT,
+    size_t history
+)
+    : cpuThreshold(cpuT),
+      ramThreshold(ramT),
+      cpuSpikeThreshold(cpuSpikeT),
+      ramSpikeThreshold(ramSpikeT),
+      cpuLeakThreshold(cpuLeakT),
+      ramLeakThreshold(ramLeakT),
+      maxHistory(history)
 {
 }
 
-double AnomalyDetector::calculateAverage(
-    const std::vector<double>& values) const
+std::vector<Alert> AnomalyDetector::check(double cpuPercent, double ramPercent)
+{
+    addToHistory(cpuPercent, ramPercent);
+
+    std::vector<Alert> alerts;
+
+    auto thresholdAlerts = checkThreshold(cpuPercent, ramPercent);
+    auto spikeAlerts     = checkSpike(cpuPercent, ramPercent);
+    auto leakAlerts      = checkLeak(cpuPercent, ramPercent);
+
+    alerts.insert(alerts.end(), thresholdAlerts.begin(), thresholdAlerts.end());
+    alerts.insert(alerts.end(), spikeAlerts.begin(), spikeAlerts.end());
+    alerts.insert(alerts.end(), leakAlerts.begin(), leakAlerts.end());
+
+    return alerts;
+}
+
+void AnomalyDetector::addToHistory(double cpuPercent, double ramPercent)
+{
+    cpuHistory.push_back(cpuPercent);
+    ramHistory.push_back(ramPercent);
+
+    if (cpuHistory.size() > maxHistory)
+        cpuHistory.erase(cpuHistory.begin());
+
+    if (ramHistory.size() > maxHistory)
+        ramHistory.erase(ramHistory.begin());
+}
+
+std::vector<Alert> AnomalyDetector::checkThreshold(double cpuPercent, double ramPercent)
+{
+    std::vector<Alert> alerts;
+
+    if (cpuPercent > cpuThreshold)
+    {
+        alerts.push_back({
+            "CPU",
+            AlertType::Threshold,
+            Severity::Warning,
+            cpuPercent,
+            cpuThreshold,
+            "CPU exceeded threshold"
+        });
+    }
+
+    if (ramPercent > ramThreshold)
+    {
+        alerts.push_back({
+            "RAM",
+            AlertType::Threshold,
+            Severity::Warning,
+            ramPercent,
+            ramThreshold,
+            "RAM exceeded threshold"
+        });
+    }
+
+    return alerts;
+}
+
+std::vector<Alert> AnomalyDetector::checkSpike(double cpuPercent, double ramPercent)
+{
+    std::vector<Alert> alerts;
+
+    if (cpuHistory.size() >= 2)
+    {
+        double cpuDiff = cpuPercent - cpuHistory[cpuHistory.size() - 2];
+
+        if (cpuDiff > cpuSpikeThreshold)
+        {
+            alerts.push_back({
+                "CPU",
+                AlertType::Spike,
+                Severity::Warning,
+                cpuPercent,
+                cpuDiff,
+                "CPU spike detected"
+            });
+        }
+    }
+
+    if (ramHistory.size() >= 2)
+    {
+        double ramDiff = ramPercent - ramHistory[ramHistory.size() - 2];
+
+        if (ramDiff > ramSpikeThreshold)
+        {
+            alerts.push_back({
+                "RAM",
+                AlertType::Spike,
+                Severity::Warning,
+                ramPercent,
+                ramDiff,
+                "RAM spike detected"
+            });
+        }
+    }
+
+    return alerts;
+}
+
+std::vector<Alert> AnomalyDetector::checkLeak(double cpuPercent, double ramPercent)
+{
+    std::vector<Alert> alerts;
+
+    if (cpuHistory.size() >= maxHistory)
+    {
+        double avgCpu = calculateAverage(cpuHistory);
+
+        if (cpuPercent - avgCpu > cpuLeakThreshold)
+        {
+            alerts.push_back({
+                "CPU",
+                AlertType::Leak,
+                Severity::Critical,
+                cpuPercent,
+                avgCpu,
+                "CPU leak/trend detected"
+            });
+        }
+    }
+
+    if (ramHistory.size() >= maxHistory)
+    {
+        double avgRam = calculateAverage(ramHistory);
+
+        if (ramPercent - avgRam > ramLeakThreshold)
+        {
+            alerts.push_back({
+                "RAM",
+                AlertType::Leak,
+                Severity::Critical,
+                ramPercent,
+                avgRam,
+                "RAM leak/trend detected"
+            });
+        }
+    }
+
+    return alerts;
+}
+
+double AnomalyDetector::calculateAverage(const std::vector<double>& values) const
 {
     if (values.empty())
         return 0.0;
@@ -29,85 +172,4 @@ double AnomalyDetector::calculateAverage(
         sum += v;
 
     return sum / values.size();
-}
-
-bool AnomalyDetector::isMonotonicIncreasing(
-    const std::vector<double>& values) const
-{
-    if (values.size() < 2)
-        return false;
-
-    for (size_t i = 1; i < values.size(); ++i)
-    {
-        if (values[i] <= values[i - 1])
-            return false;
-    }
-
-    return true;
-}
-
-std::vector<std::string> AnomalyDetector::check(double cpuPercent, double ramPercent)
-{
-    std::vector<std::string> alerts;
-
-
-    // absolute threshold checks
-    if (ramPercent > ramThreshold)
-        alerts.push_back("[WARNING] High RAM usage");
-
-    if (cpuPercent > cpuThreshold)
-        alerts.push_back("[WARNING] High CPU usage");
-
-
-    // spike detection (based on history average)
-    if (!cpuHistory.empty())
-    {
-        double avgCpu = calculateAverage(cpuHistory);
-
-        if ((cpuPercent - avgCpu) > cpuSpikeThreshold)
-            alerts.push_back("[SPIKE] CPU deviates from recent average");
-    }
-
-    if (!ramHistory.empty())
-    {
-        double avgRam = calculateAverage(ramHistory);
-
-        if ((ramPercent - avgRam) > ramSpikeThreshold)
-            alerts.push_back("[SPIKE] RAM deviates from recent average");
-    }
-
-    // leak detection
-    if (cpuHistory.size() == maxHistory)
-    {
-        double increase = cpuHistory.back() - cpuHistory.front();
-
-        if (increase > cpuLeakThreshold &&
-            isMonotonicIncreasing(cpuHistory))
-        {
-            alerts.push_back("[LEAK] CPU shows steady increase");
-        }
-    }
-
-    if (ramHistory.size() == maxHistory)
-    {
-        double increase = ramHistory.back() - ramHistory.front();
-
-        if (increase > ramLeakThreshold &&
-            isMonotonicIncreasing(ramHistory))
-        {
-            alerts.push_back("[LEAK] RAM shows steady increase");
-        }
-    }
-
-    // update history AFTER analysis
-    cpuHistory.push_back(cpuPercent);
-    ramHistory.push_back(ramPercent);
-
-    if (cpuHistory.size() > maxHistory)
-        cpuHistory.erase(cpuHistory.begin());
-
-    if (ramHistory.size() > maxHistory)
-        ramHistory.erase(ramHistory.begin());
-
-    return alerts;
 }

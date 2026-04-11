@@ -1,36 +1,40 @@
 #pragma once
 
 #include <vector>
-#include <string>
+#include "Alert.h"
 
 class AnomalyDetector {
 public:
-    AnomalyDetector(double cpuThreshold, 
-                    double ramThreshold, 
-                    double cpuSpikeThreshold, 
-                    double ramSpikeThreshold, 
-                    double cpuLeakThreshold, 
-                    double ramLeakThreshold, 
-                    size_t historySize = 5);
+    AnomalyDetector(
+        double cpuThreshold,
+        double ramThreshold,
+        double cpuSpikeThreshold,
+        double ramSpikeThreshold,
+        double cpuLeakThreshold,
+        double ramLeakThreshold,
+        size_t historySize
+    );
 
-    std::vector<std::string> check(double cpuPercent, double ramPercent);
+    std::vector<Alert> check(double cpuPercent, double ramPercent);
 
 private:
-    const double cpuThreshold;
-    const double ramThreshold;
+    void addToHistory(double cpuPercent, double ramPercent);
 
-    const double cpuSpikeThreshold;
-    const double ramSpikeThreshold;
-
-    const double cpuLeakThreshold;
-    const double ramLeakThreshold;
-
-    const size_t maxHistory;
-
-    std::vector<double> cpuHistory;
-    std::vector<double> ramHistory;
+    std::vector<Alert> checkThreshold(double cpuPercent, double ramPercent);
+    std::vector<Alert> checkSpike(double cpuPercent, double ramPercent);
+    std::vector<Alert> checkLeak(double cpuPercent, double ramPercent);
 
     double calculateAverage(const std::vector<double>& values) const;
 
-    bool isMonotonicIncreasing(const std::vector<double>& values) const;
+    double cpuThreshold;
+    double ramThreshold;
+    double cpuSpikeThreshold;
+    double ramSpikeThreshold;
+    double cpuLeakThreshold;
+    double ramLeakThreshold;
+
+    size_t maxHistory;
+
+    std::vector<double> cpuHistory;
+    std::vector<double> ramHistory;
 };

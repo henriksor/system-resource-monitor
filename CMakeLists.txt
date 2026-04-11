@@ -17,10 +17,5 @@ add_executable(SystemResourceMonitor
 target_include_directories(SystemResourceMonitor
     PRIVATE
         ${CMAKE_SOURCE_DIR}/include
-)
-
-target_include_directories(SystemResourceMonitor
-    PRIVATE
-        include
-        external/json
+        ${CMAKE_SOURCE_DIR}/external/json
 )

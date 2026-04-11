@@ -80,7 +80,26 @@ void SystemMonitor::run()
 
         for (const auto& alert : alerts)
         {
-            std::cout << alert << "\n";
+            switch (alert.severity)
+            {
+                case Severity::Info:
+                    std::cout << "\x1B[34m";
+                    break;
+                case Severity::Warning:
+                    std::cout << "\x1B[33m";
+                    break;
+                case Severity::Critical:
+                    std::cout << "\x1B[31m";
+                    break;
+            }
+
+            std::cout << alert.message
+                    << " (" << alert.metric << ": "
+                    << alert.value << ")\n";
+
+            std::cout << "\x1B[0m";
+
+            logger.logAlert(alert);
         }
 
         Sleep(1000);
