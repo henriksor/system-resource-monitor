@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <iomanip>
 #include <csignal>
+#include <algorithm>
 
 #include "SystemMonitor.h"
 #include "ConfigManager.h"
@@ -83,13 +84,66 @@ void SystemMonitor::run()
 
         auto processes = processMonitor.getProcesses();
 
-        std::cout << "\n--- Process RAM Usage ---\n";
+        auto processesCpu = processes;
 
-        for (const auto& p : processes)
+        std::sort(processesCpu.begin(), processesCpu.end(),
+            [](const ProcessInfo& a, const ProcessInfo& b)
+            {
+                return a.cpuPercent > b.cpuPercent;
+            });
+
+        std::sort(processes.begin(), processes.end(),
+            [](const ProcessInfo& a, const ProcessInfo& b)
+            {
+                return a.ramBytes > b.ramBytes;
+            });
+
+
+        std::cout << "\n===== TOP 5 CPU =====\n";
+
+        size_t topCpuCount = std::min<size_t>(5, processesCpu.size());
+
+        for (size_t i = 0; i < topCpuCount; ++i)
         {
-            std::cout << p.name << " (PID: " << p.pid << ") "
+            const auto& p = processesCpu[i];
+
+            std::cout << p.name
+                    << " (PID: " << p.pid << ") "
+                    << p.cpuPercent << " %\n";
+        }
+
+        std::cout << "\n===== TOP 5 RAM CONSUMERS =====\n";
+
+        size_t topCount = std::min<size_t>(5, processes.size());
+
+        for (size_t i = 0; i < topCount; ++i)
+        {
+            const auto& p = processes[i];
+
+            std::cout << p.name
+                    << " (PID: " << p.pid << ") "
                     << p.ramBytes / 1024.0 / 1024.0
                     << " MB\n";
+        }
+
+        std::cout << "\n===== OTHER PROCESSES > 1% RAM =====\n";
+
+        uint64_t totalRamBytes = mem.totalBytes;
+
+        for (size_t i = topCount; i < processes.size(); ++i)
+        {
+            const auto& p = processes[i];
+
+            double percent =
+                (static_cast<double>(p.ramBytes) /
+                static_cast<double>(totalRamBytes)) * 100.0;
+
+            if (percent > 1.0)
+            {
+                std::cout << p.name
+                        << " (PID: " << p.pid << ") "
+                        << percent << " %\n";
+            }
         }
 
         for (const auto& alert : alerts)
