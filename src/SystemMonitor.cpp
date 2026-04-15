@@ -5,6 +5,7 @@
 
 #include "SystemMonitor.h"
 #include "ConfigManager.h"
+#include "ProcessMonitor.h"
 
 // pointer used for Ctrl+C handling
 static SystemMonitor* instance = nullptr;
@@ -55,6 +56,8 @@ void SystemMonitor::run()
     
     warmUp();
 
+    ProcessMonitor processMonitor;
+
     while (running)
     {
         // Clear screen using ANSI escape codes
@@ -77,6 +80,17 @@ void SystemMonitor::run()
         logger.log(cpuPercent, mem.percentUsed, mem.usedBytes);
 
         auto alerts = detector.check(cpuPercent, mem.percentUsed);
+
+        auto processes = processMonitor.getProcesses();
+
+        std::cout << "\n--- Process RAM Usage ---\n";
+
+        for (const auto& p : processes)
+        {
+            std::cout << p.name << " (PID: " << p.pid << ") "
+                    << p.ramBytes / 1024.0 / 1024.0
+                    << " MB\n";
+        }
 
         for (const auto& alert : alerts)
         {

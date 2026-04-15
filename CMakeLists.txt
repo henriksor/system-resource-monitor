@@ -12,6 +12,7 @@ add_executable(SystemResourceMonitor
     src/Logger.cpp
     src/AnomalyDetector.cpp
     src/ConfigManager.cpp
+    src/ProcessMonitor.cpp
 )
 
 target_include_directories(SystemResourceMonitor
