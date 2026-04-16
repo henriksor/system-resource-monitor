@@ -52,11 +52,13 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
 
     // Get system CPU time
     FILETIME idleTime, kernelTime, userTime;
-    GetSystemTimes(&idleTime, &kernelTime, &userTime);
+    bool hasSystemTimes =
+        GetSystemTimes(&idleTime, &kernelTime, &userTime) != FALSE;
 
     uint64_t systemTime =
-        fileTimeToUInt64(kernelTime) +
-        fileTimeToUInt64(userTime);
+        hasSystemTimes
+            ? fileTimeToUInt64(kernelTime) + fileTimeToUInt64(userTime)
+            : 0;
 
     MEMORYSTATUSEX memoryStatus = {};
     memoryStatus.dwLength = sizeof(memoryStatus);
@@ -91,64 +93,54 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
                 ProcessInfo info;
                 info.name = entry.szExeFile;
                 info.pid  = entry.th32ProcessID;
+                uint64_t currentRamBytes = 0;
+                bool hasMemoryInfo = false;
+
+                FILETIME createTime, exitTime, kernelProcTime, userProcTime;
+                bool hasProcessTimes =
+                    GetProcessTimes(processHandle,
+                                    &createTime,
+                                    &exitTime,
+                                    &kernelProcTime,
+                                    &userProcTime) != FALSE;
+                bool sameProcessInstance = false;
+
+                if (hasProcessTimes)
+                {
+                    uint64_t currentCreateTime = fileTimeToUInt64(createTime);
+                    auto previousCreateTimeIt =
+                        previousProcessCreateTimes.find(entry.th32ProcessID);
+                    sameProcessInstance =
+                        previousCreateTimeIt !=
+                            previousProcessCreateTimes.end() &&
+                        previousCreateTimeIt->second == currentCreateTime;
+
+                    if (!sameProcessInstance)
+                    {
+                        previousProcessTimes.erase(entry.th32ProcessID);
+                        previousProcessCreateTimes.erase(entry.th32ProcessID);
+                        cpuHistoryByPid.erase(entry.th32ProcessID);
+                        ramHistoryByPid.erase(entry.th32ProcessID);
+                    }
+
+                    previousProcessCreateTimes[entry.th32ProcessID] =
+                        currentCreateTime;
+                }
+                else
+                {
+                    previousProcessTimes.erase(entry.th32ProcessID);
+                    previousProcessCreateTimes.erase(entry.th32ProcessID);
+                    cpuHistoryByPid.erase(entry.th32ProcessID);
+                    ramHistoryByPid.erase(entry.th32ProcessID);
+                }
 
                 // RAM
                 PROCESS_MEMORY_COUNTERS pmc;
                 if (GetProcessMemoryInfo(processHandle, &pmc, sizeof(pmc)))
                 {
-                    info.ramBytes = pmc.WorkingSetSize;
-
-                    auto& ramHistory = ramHistoryByPid[entry.th32ProcessID];
-                    ramHistory.push_back(info.ramBytes);
-                    if (ramHistory.size() > maxHistory)
-                    {
-                        ramHistory.pop_front();
-                    }
-
-                    if (ramHistory.size() >= maxHistory)
-                    {
-                        bool consistentlyIncreasing = true;
-                        uint64_t totalGrowthBytes = 0;
-
-                        for (size_t i = 1; i < ramHistory.size(); ++i)
-                        {
-                            if (ramHistory[i] <= ramHistory[i - 1])
-                            {
-                                consistentlyIncreasing = false;
-                                break;
-                            }
-
-                            totalGrowthBytes +=
-                                ramHistory[i] - ramHistory[i - 1];
-                        }
-
-                        if (consistentlyIncreasing)
-                        {
-                            double averageGrowthBytes =
-                                static_cast<double>(totalGrowthBytes) /
-                                static_cast<double>(ramHistory.size() - 1);
-
-                            if (averageGrowthBytes > ramLeakThresholdBytes)
-                            {
-                                result.alerts.push_back({
-                                    "Process RAM",
-                                    AlertType::Leak,
-                                    Severity::Critical,
-                                    static_cast<double>(info.ramBytes) /
-                                        1024.0 / 1024.0,
-                                    averageGrowthBytes /
-                                        1024.0 / 1024.0,
-                                    buildProcessAlertMessage(
-                                        info,
-                                        "Process RAM",
-                                        static_cast<double>(info.ramBytes) /
-                                            1024.0 / 1024.0,
-                                        "RAM leak detected"
-                                    )
-                                });
-                            }
-                        }
-                    }
+                    hasMemoryInfo = true;
+                    currentRamBytes = pmc.WorkingSetSize;
+                    info.ramBytes = currentRamBytes;
                 }
 
                 double ramPercent = 0.0;
@@ -161,14 +153,7 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
 
                 if (ramPercent >= kCpuCalculationMinRamPercent)
                 {
-                    // CPU
-                    FILETIME createTime, exitTime, kernelProcTime, userProcTime;
-
-                    if (GetProcessTimes(processHandle,
-                                        &createTime,
-                                        &exitTime,
-                                        &kernelProcTime,
-                                        &userProcTime))
+                    if (hasProcessTimes)
                     {
                         uint64_t processTime =
                             fileTimeToUInt64(kernelProcTime) +
@@ -183,19 +168,35 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
 
                         double cpuPercent = 0.0;
 
-                        if (previousSystemTime > 0)
+                        bool hasValidCpuBaseline =
+                            sameProcessInstance &&
+                            hasSystemTimes &&
+                            previousSystemTime > 0 &&
+                            previousTimeIt != previousProcessTimes.end();
+
+                        if (hasValidCpuBaseline)
                         {
-                            uint64_t deltaProcess =
-                                processTime - previousTime;
-
-                            uint64_t deltaSystem =
-                                systemTime - previousSystemTime;
-
-                            if (deltaSystem > 0)
+                            if (processTime < previousTime)
                             {
-                                cpuPercent =
-                                    (static_cast<double>(deltaProcess) /
-                                     static_cast<double>(deltaSystem)) * 100.0;
+                                previousProcessTimes[entry.th32ProcessID] =
+                                    processTime;
+                                cpuHistoryByPid.erase(entry.th32ProcessID);
+                            }
+                            else
+                            {
+                                uint64_t deltaProcess =
+                                    processTime - previousTime;
+
+                                uint64_t deltaSystem =
+                                    systemTime - previousSystemTime;
+
+                                if (deltaSystem > 0)
+                                {
+                                    cpuPercent =
+                                        (static_cast<double>(deltaProcess) /
+                                         static_cast<double>(deltaSystem)) *
+                                        100.0;
+                                }
                             }
                         }
 
@@ -234,6 +235,60 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
                     }
                 }
 
+                if (hasMemoryInfo && hasProcessTimes)
+                {
+                    auto& ramHistory = ramHistoryByPid[entry.th32ProcessID];
+                    ramHistory.push_back(currentRamBytes);
+                    if (ramHistory.size() > maxHistory)
+                    {
+                        ramHistory.pop_front();
+                    }
+
+                    if (ramHistory.size() >= maxHistory)
+                    {
+                        bool consistentlyIncreasing = true;
+                        uint64_t totalGrowthBytes = 0;
+
+                        for (size_t i = 1; i < ramHistory.size(); ++i)
+                        {
+                            if (ramHistory[i] <= ramHistory[i - 1])
+                            {
+                                consistentlyIncreasing = false;
+                                break;
+                            }
+
+                            totalGrowthBytes +=
+                                ramHistory[i] - ramHistory[i - 1];
+                        }
+
+                        if (consistentlyIncreasing)
+                        {
+                            double averageGrowthBytes =
+                                static_cast<double>(totalGrowthBytes) /
+                                static_cast<double>(ramHistory.size() - 1);
+
+                            if (averageGrowthBytes > ramLeakThresholdBytes)
+                            {
+                                result.alerts.push_back({
+                                    "Process RAM",
+                                    AlertType::Leak,
+                                    Severity::Critical,
+                                    static_cast<double>(info.ramBytes) /
+                                        1024.0 / 1024.0,
+                                    averageGrowthBytes / 1024.0 / 1024.0,
+                                    buildProcessAlertMessage(
+                                        info,
+                                        "Process RAM",
+                                        static_cast<double>(info.ramBytes) /
+                                            1024.0 / 1024.0,
+                                        "RAM leak detected"
+                                    )
+                                });
+                            }
+                        }
+                    }
+                }
+
                 result.processes.push_back(info);
 
                 CloseHandle(processHandle);
@@ -250,6 +305,19 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
         if (activePids.find(it->first) == activePids.end())
         {
             it = previousProcessTimes.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    for (auto it = previousProcessCreateTimes.begin();
+         it != previousProcessCreateTimes.end();)
+    {
+        if (activePids.find(it->first) == activePids.end())
+        {
+            it = previousProcessCreateTimes.erase(it);
         }
         else
         {

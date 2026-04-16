@@ -16,6 +16,7 @@ struct ProcessMonitorResult
 class ProcessMonitor {
 private:
     std::unordered_map<DWORD, uint64_t> previousProcessTimes;
+    std::unordered_map<DWORD, uint64_t> previousProcessCreateTimes;
     std::unordered_map<DWORD, std::deque<double>> cpuHistoryByPid;
     std::unordered_map<DWORD, std::deque<uint64_t>> ramHistoryByPid;
     uint64_t previousSystemTime = 0;

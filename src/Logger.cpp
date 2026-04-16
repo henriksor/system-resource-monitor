@@ -145,7 +145,7 @@ void Logger::logProcessGroup(
 
         processFile << category << ","
                     << (i + 1) << ","
-                    << process.name << ","
+                    << escapeCsvField(process.name) << ","
                     << process.pid << ","
                     << process.cpuPercent << ","
                     << process.ramBytes << ","
