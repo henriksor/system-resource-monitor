@@ -8,6 +8,6 @@ struct ProcessInfo
 {
     DWORD pid;
     std::string name;
-    uint64_t ramBytes;
-    double cpuPercent = 0.0;   // ← NY
+    uint64_t ramBytes = 0;
+    double cpuPercent = 0.0;
 };

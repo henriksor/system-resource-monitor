@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <csignal>
 #include <algorithm>
+#include <unordered_set>
 
 #include "SystemMonitor.h"
 #include "ConfigManager.h"
@@ -102,10 +103,14 @@ void SystemMonitor::run()
         std::cout << "\n===== TOP 5 CPU =====\n";
 
         size_t topCpuCount = std::min<size_t>(5, processesCpu.size());
+        size_t topRamCount = std::min<size_t>(5, processes.size());
+        uint64_t totalRamBytes = mem.totalBytes;
+        std::unordered_set<DWORD> highlightedPids;
 
         for (size_t i = 0; i < topCpuCount; ++i)
         {
             const auto& p = processesCpu[i];
+            highlightedPids.insert(p.pid);
 
             std::cout << p.name
                     << " (PID: " << p.pid << ") "
@@ -114,35 +119,61 @@ void SystemMonitor::run()
 
         std::cout << "\n===== TOP 5 RAM CONSUMERS =====\n";
 
-        size_t topCount = std::min<size_t>(5, processes.size());
-
-        for (size_t i = 0; i < topCount; ++i)
+        for (size_t i = 0; i < topRamCount; ++i)
         {
             const auto& p = processes[i];
+            highlightedPids.insert(p.pid);
+
+            double ramPercent =
+                totalRamBytes > 0
+                    ? (static_cast<double>(p.ramBytes) /
+                       static_cast<double>(totalRamBytes)) * 100.0
+                    : 0.0;
 
             std::cout << p.name
                     << " (PID: " << p.pid << ") "
-                    << p.ramBytes / 1024.0 / 1024.0
-                    << " MB\n";
+                    << ramPercent << " %\n";
         }
 
-        std::cout << "\n===== OTHER PROCESSES > 1% RAM =====\n";
+        std::cout << "\n===== OTHER PROCESSES > 1% CPU OR RAM =====\n";
 
-        uint64_t totalRamBytes = mem.totalBytes;
-
-        for (size_t i = topCount; i < processes.size(); ++i)
+        for (const auto& p : processes)
         {
-            const auto& p = processes[i];
-
-            double percent =
-                (static_cast<double>(p.ramBytes) /
-                static_cast<double>(totalRamBytes)) * 100.0;
-
-            if (percent > 1.0)
+            if (highlightedPids.count(p.pid) > 0)
             {
+                continue;
+            }
+
+            double ramPercent =
+                totalRamBytes > 0
+                    ? (static_cast<double>(p.ramBytes) /
+                       static_cast<double>(totalRamBytes)) * 100.0
+                    : 0.0;
+            bool ramOverThreshold = ramPercent > 1.0;
+            bool cpuOverThreshold = p.cpuPercent > 1.0;
+
+            if (ramOverThreshold || cpuOverThreshold)
+            {
+                std::string metricsLabel;
+
+                if (cpuOverThreshold && ramOverThreshold)
+                {
+                    metricsLabel = "CPU & RAM";
+                }
+                else if (cpuOverThreshold)
+                {
+                    metricsLabel = "CPU";
+                }
+                else
+                {
+                    metricsLabel = "RAM";
+                }
+
                 std::cout << p.name
                         << " (PID: " << p.pid << ") "
-                        << percent << " %\n";
+                        << "[" << metricsLabel << "] "
+                        << "CPU: " << p.cpuPercent << " %, "
+                        << "RAM: " << ramPercent << " %\n";
             }
         }
 
