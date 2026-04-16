@@ -32,6 +32,28 @@ std::string severityToString(Severity severity)
 
     return "Unknown";
 }
+
+std::string escapeCsvField(const std::string& value)
+{
+    std::string escaped;
+    escaped.reserve(value.size() + 2);
+    escaped.push_back('"');
+
+    for (char ch : value)
+    {
+        if (ch == '"')
+        {
+            escaped += "\"\"";
+        }
+        else
+        {
+            escaped.push_back(ch);
+        }
+    }
+
+    escaped.push_back('"');
+    return escaped;
+}
 } // namespace
 
 Logger::Logger(const std::string& filename)
@@ -138,5 +160,5 @@ void Logger::logAlert(const Alert& alert)
               << severityToString(alert.severity) << ","
               << alert.value << ","
               << alert.reference << ","
-              << alert.message << "\n";
+              << escapeCsvField(alert.message) << "\n";
 }

@@ -49,7 +49,6 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
 {
     ProcessMonitorResult result;
     std::unordered_set<DWORD> activePids;
-    std::unordered_set<DWORD> cpuTrackedPids;
 
     // Get system CPU time
     FILETIME idleTime, kernelTime, userTime;
@@ -162,8 +161,6 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
 
                 if (ramPercent >= kCpuCalculationMinRamPercent)
                 {
-                    cpuTrackedPids.insert(entry.th32ProcessID);
-
                     // CPU
                     FILETIME createTime, exitTime, kernelProcTime, userProcTime;
 
@@ -236,11 +233,6 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
                         previousProcessTimes[entry.th32ProcessID] = processTime;
                     }
                 }
-                else
-                {
-                    previousProcessTimes.erase(entry.th32ProcessID);
-                    cpuHistoryByPid.erase(entry.th32ProcessID);
-                }
 
                 result.processes.push_back(info);
 
@@ -255,7 +247,7 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
     for (auto it = previousProcessTimes.begin();
          it != previousProcessTimes.end();)
     {
-        if (cpuTrackedPids.find(it->first) == cpuTrackedPids.end())
+        if (activePids.find(it->first) == activePids.end())
         {
             it = previousProcessTimes.erase(it);
         }
@@ -268,7 +260,7 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
     for (auto it = cpuHistoryByPid.begin();
          it != cpuHistoryByPid.end();)
     {
-        if (cpuTrackedPids.find(it->first) == cpuTrackedPids.end())
+        if (activePids.find(it->first) == activePids.end())
         {
             it = cpuHistoryByPid.erase(it);
         }

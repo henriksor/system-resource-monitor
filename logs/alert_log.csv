@@ -1,3 +1,5 @@
 Metric,Type,Severity,Value,Reference,Message
 CPU,Spike,Warning,56.0634,13.3877,CPU spike detected
 Process CPU,Spike,Warning,40.2985,40.2985,CPU spike detected [PID=26876, Name=RustClient.exe, Metric=Process CPU, Value=40.30]
+Process CPU,Spike,Warning,34.1856,34.1856,"CPU spike detected [PID=26876, Name=RustClient.exe, Metric=Process CPU, Value=34.19]"
+RAM,Threshold,Warning,80.5655,80,"RAM exceeded threshold"
