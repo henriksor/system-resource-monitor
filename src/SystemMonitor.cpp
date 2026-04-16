@@ -3,10 +3,10 @@
 #include <iomanip>
 #include <csignal>
 #include <algorithm>
+#include <unordered_set>
 
 #include "SystemMonitor.h"
 #include "ConfigManager.h"
-#include "ProcessMonitor.h"
 
 // pointer used for Ctrl+C handling
 static SystemMonitor* instance = nullptr;
@@ -36,6 +36,11 @@ void SystemMonitor::stop()
 
 SystemMonitor::SystemMonitor()
     : config("config.json"),
+      processMonitor(
+          config.cpuSpikeThreshold(),
+          config.ramLeakThreshold(),
+          config.historySize()
+      ),
       logger(config.logFile()),
       detector(
           config.cpuThreshold(),
@@ -54,13 +59,16 @@ void SystemMonitor::run()
     // Register Ctrl+C handler
     instance = this;
     SetConsoleCtrlHandler(consoleHandler, TRUE);
-    
-    warmUp();
 
-    ProcessMonitor processMonitor;
+    warmUp();
 
     while (running)
     {
+        constexpr int nameWidth = 30;
+        constexpr int pidWidth = 8;
+        constexpr int cpuWidth = 10;
+        constexpr int ramWidth = 12;
+
         // Clear screen using ANSI escape codes
         std::cout << "\x1B[2J\x1B[H";
 
@@ -78,11 +86,18 @@ void SystemMonitor::run()
 
         std::cout << "Used: " << mem.usedBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
 
-        logger.log(cpuPercent, mem.percentUsed, mem.usedBytes);
+        logger.logSystem(cpuPercent, mem.percentUsed, mem.usedBytes);
 
         auto alerts = detector.check(cpuPercent, mem.percentUsed);
 
-        auto processes = processMonitor.getProcesses();
+        auto processResult = processMonitor.getProcesses();
+        auto processes = processResult.processes;
+
+        alerts.insert(
+            alerts.end(),
+            processResult.alerts.begin(),
+            processResult.alerts.end()
+        );
 
         auto processesCpu = processes;
 
@@ -102,47 +117,112 @@ void SystemMonitor::run()
         std::cout << "\n===== TOP 5 CPU =====\n";
 
         size_t topCpuCount = std::min<size_t>(5, processesCpu.size());
+        size_t topRamCount = std::min<size_t>(5, processes.size());
+        uint64_t totalRamBytes = mem.totalBytes;
+        std::unordered_set<DWORD> highlightedPids;
+        std::vector<ProcessInfo> topCpuProcesses(
+            processesCpu.begin(),
+            processesCpu.begin() + topCpuCount
+        );
+        std::vector<ProcessInfo> topRamProcesses(
+            processes.begin(),
+            processes.begin() + topRamCount
+        );
 
-        for (size_t i = 0; i < topCpuCount; ++i)
+        logger.logProcesses(topCpuProcesses, topRamProcesses);
+
+        auto printProcessTableHeader = [&]()
         {
-            const auto& p = processesCpu[i];
+            std::cout << std::left
+                    << std::setw(nameWidth) << "Name"
+                    << std::right
+                    << std::setw(pidWidth) << "PID"
+                    << std::setw(cpuWidth) << "CPU%"
+                    << std::setw(ramWidth) << "RAM MB"
+                    << "\n";
 
-            std::cout << p.name
-                    << " (PID: " << p.pid << ") "
-                    << p.cpuPercent << " %\n";
+            std::cout << std::left
+                    << std::setw(nameWidth) << std::string(nameWidth - 1, '-')
+                    << std::right
+                    << std::setw(pidWidth) << std::string(pidWidth - 1, '-')
+                    << std::setw(cpuWidth) << std::string(cpuWidth - 1, '-')
+                    << std::setw(ramWidth) << std::string(ramWidth - 1, '-')
+                    << "\n";
+        };
+
+        auto printProcessRow = [&](const ProcessInfo& p)
+        {
+            double ramMb =
+                static_cast<double>(p.ramBytes) / 1024.0 / 1024.0;
+
+            std::cout << std::left
+                    << std::setw(nameWidth) << p.name.substr(0, nameWidth - 1)
+                    << std::right
+                    << std::setw(pidWidth) << p.pid
+                    << std::setw(cpuWidth) << p.cpuPercent
+                    << std::setw(ramWidth) << ramMb
+                    << "\n";
+        };
+
+        printProcessTableHeader();
+
+        for (const auto& p : topCpuProcesses)
+        {
+            highlightedPids.insert(p.pid);
+
+            printProcessRow(p);
         }
 
         std::cout << "\n===== TOP 5 RAM CONSUMERS =====\n";
 
-        size_t topCount = std::min<size_t>(5, processes.size());
+        printProcessTableHeader();
 
-        for (size_t i = 0; i < topCount; ++i)
+        for (const auto& p : topRamProcesses)
         {
-            const auto& p = processes[i];
+            highlightedPids.insert(p.pid);
 
-            std::cout << p.name
-                    << " (PID: " << p.pid << ") "
-                    << p.ramBytes / 1024.0 / 1024.0
-                    << " MB\n";
+            printProcessRow(p);
         }
 
-        std::cout << "\n===== OTHER PROCESSES > 1% RAM =====\n";
+        std::cout << "\n===== OTHER PROCESSES > 1% CPU OR RAM =====\n";
 
-        uint64_t totalRamBytes = mem.totalBytes;
-
-        for (size_t i = topCount; i < processes.size(); ++i)
+        for (const auto& p : processes)
         {
-            const auto& p = processes[i];
-
-            double percent =
-                (static_cast<double>(p.ramBytes) /
-                static_cast<double>(totalRamBytes)) * 100.0;
-
-            if (percent > 1.0)
+            if (highlightedPids.count(p.pid) > 0)
             {
+                continue;
+            }
+
+            double ramPercent =
+                totalRamBytes > 0
+                    ? (static_cast<double>(p.ramBytes) /
+                       static_cast<double>(totalRamBytes)) * 100.0
+                    : 0.0;
+            bool ramOverThreshold = ramPercent > 1.0;
+            bool cpuOverThreshold = p.cpuPercent > 1.0;
+
+            if (ramOverThreshold || cpuOverThreshold)
+            {
+                std::string metricsLabel;
+
+                if (cpuOverThreshold && ramOverThreshold)
+                {
+                    metricsLabel = "CPU & RAM";
+                }
+                else if (cpuOverThreshold)
+                {
+                    metricsLabel = "CPU";
+                }
+                else
+                {
+                    metricsLabel = "RAM";
+                }
+
                 std::cout << p.name
                         << " (PID: " << p.pid << ") "
-                        << percent << " %\n";
+                        << "[" << metricsLabel << "] "
+                        << "CPU: " << p.cpuPercent << " %, "
+                        << "RAM: " << ramPercent << " %\n";
             }
         }
 

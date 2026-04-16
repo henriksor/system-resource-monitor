@@ -5,6 +5,7 @@
 #include "Logger.h"
 #include "AnomalyDetector.h"
 #include "ConfigManager.h"
+#include "ProcessMonitor.h"
 
 #include <atomic>
 
@@ -22,6 +23,7 @@ private:
     ConfigManager config;
     CpuMonitor cpu;
     MemoryMonitor memory;
+    ProcessMonitor processMonitor;
     Logger logger;
     AnomalyDetector detector;
 };
