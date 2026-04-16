@@ -1,13 +1,14 @@
 #include <windows.h>
 #include "CpuMonitor.h"
 
-CpuMonitor::CpuTimes CpuMonitor::getCurrentTimes()
+bool CpuMonitor::getCurrentTimes(CpuTimes& times) const
 {
     FILETIME idleTime, kernelTime, userTime;
 
-    GetSystemTimes(&idleTime, &kernelTime, &userTime);
-
-    CpuTimes times;
+    if (GetSystemTimes(&idleTime, &kernelTime, &userTime) == FALSE)
+    {
+        return false;
+    }
 
     times.idle =
         (static_cast<uint64_t>(idleTime.dwHighDateTime) << 32) |
@@ -21,12 +22,19 @@ CpuMonitor::CpuTimes CpuMonitor::getCurrentTimes()
         (static_cast<uint64_t>(userTime.dwHighDateTime) << 32) |
         userTime.dwLowDateTime;
 
-    return times;
+    return true;
 }
 
 double CpuMonitor::getUsage()
 {
-    CpuTimes current = getCurrentTimes();
+    CpuTimes current{};
+    if (!getCurrentTimes(current))
+    {
+        // Drop the previous baseline so the next successful read starts from
+        // fresh data instead of combining a stale sample with a later one.
+        hasPrevious = false;
+        return 0.0;
+    }
 
     if (!hasPrevious)
     {

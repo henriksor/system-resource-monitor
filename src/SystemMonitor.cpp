@@ -38,7 +38,7 @@ SystemMonitor::SystemMonitor()
     : config("config.json"),
       processMonitor(
           config.cpuSpikeThreshold(),
-          config.ramLeakThreshold(),
+          config.ramLeakThresholdMb(),
           config.historySize()
       ),
       logger(config.logFile()),
@@ -48,7 +48,7 @@ SystemMonitor::SystemMonitor()
           config.cpuSpikeThreshold(),
           config.ramSpikeThreshold(),
           config.cpuLeakThreshold(),
-          config.ramLeakThreshold(),
+          config.ramLeakThresholdPercent(),
           config.historySize()
       )
 {

@@ -13,7 +13,8 @@ public:
     double ramSpikeThreshold() const;
 
     double cpuLeakThreshold() const;
-    double ramLeakThreshold() const;
+    double ramLeakThresholdPercent() const;
+    double ramLeakThresholdMb() const;
 
     size_t historySize() const;
 
@@ -29,7 +30,8 @@ private:
     double m_ramSpikeThreshold;
 
     double m_cpuLeakThreshold;
-    double m_ramLeakThreshold;
+    double m_ramLeakThresholdPercent;
+    double m_ramLeakThresholdMb;
 
     size_t m_historySize;
 

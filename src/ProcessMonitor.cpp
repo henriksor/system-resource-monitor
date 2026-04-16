@@ -15,8 +15,6 @@ static uint64_t fileTimeToUInt64(const FILETIME& ft)
            ft.dwLowDateTime;
 }
 
-static constexpr double kCpuCalculationMinRamPercent = 0.1;
-
 static std::string buildProcessAlertMessage(
     const ProcessInfo& process,
     const std::string& metric,
@@ -135,7 +133,7 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
                 }
 
                 // RAM
-                PROCESS_MEMORY_COUNTERS pmc;
+                PROCESS_MEMORY_COUNTERS pmc{};
                 if (GetProcessMemoryInfo(processHandle, &pmc, sizeof(pmc)))
                 {
                     hasMemoryInfo = true;
@@ -151,58 +149,67 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
                          static_cast<double>(totalPhysicalMemory)) * 100.0;
                 }
 
-                if (ramPercent >= kCpuCalculationMinRamPercent)
+                if (hasProcessTimes)
                 {
-                    if (hasProcessTimes)
+                    uint64_t processTime =
+                        fileTimeToUInt64(kernelProcTime) +
+                        fileTimeToUInt64(userProcTime);
+
+                    auto previousTimeIt =
+                        previousProcessTimes.find(entry.th32ProcessID);
+                    uint64_t previousTime =
+                        previousTimeIt != previousProcessTimes.end()
+                            ? previousTimeIt->second
+                            : 0;
+
+                    double cpuPercent = 0.0;
+
+                    bool hasValidCpuBaseline =
+                        sameProcessInstance &&
+                        hasSystemTimes &&
+                        previousSystemTime > 0 &&
+                        previousTimeIt != previousProcessTimes.end();
+
+                    if (hasValidCpuBaseline)
                     {
-                        uint64_t processTime =
-                            fileTimeToUInt64(kernelProcTime) +
-                            fileTimeToUInt64(userProcTime);
-
-                        auto previousTimeIt =
-                            previousProcessTimes.find(entry.th32ProcessID);
-                        uint64_t previousTime =
-                            previousTimeIt != previousProcessTimes.end()
-                                ? previousTimeIt->second
-                                : 0;
-
-                        double cpuPercent = 0.0;
-
-                        bool hasValidCpuBaseline =
-                            sameProcessInstance &&
-                            hasSystemTimes &&
-                            previousSystemTime > 0 &&
-                            previousTimeIt != previousProcessTimes.end();
-
-                        if (hasValidCpuBaseline)
+                        if (processTime < previousTime)
                         {
-                            if (processTime < previousTime)
-                            {
-                                previousProcessTimes[entry.th32ProcessID] =
-                                    processTime;
-                                cpuHistoryByPid.erase(entry.th32ProcessID);
-                            }
-                            else
-                            {
-                                uint64_t deltaProcess =
-                                    processTime - previousTime;
+                            previousProcessTimes[entry.th32ProcessID] =
+                                processTime;
+                            cpuHistoryByPid.erase(entry.th32ProcessID);
+                        }
+                        else
+                        {
+                            uint64_t deltaProcess =
+                                processTime - previousTime;
 
-                                uint64_t deltaSystem =
-                                    systemTime - previousSystemTime;
+                            uint64_t deltaSystem =
+                                systemTime - previousSystemTime;
 
-                                if (deltaSystem > 0)
-                                {
-                                    cpuPercent =
-                                        (static_cast<double>(deltaProcess) /
-                                         static_cast<double>(deltaSystem)) *
-                                        100.0;
-                                }
+                            if (deltaSystem > 0)
+                            {
+                                cpuPercent =
+                                    (static_cast<double>(deltaProcess) /
+                                     static_cast<double>(deltaSystem)) *
+                                    100.0;
                             }
                         }
+                    }
 
-                        info.cpuPercent = cpuPercent;
+                    info.cpuPercent = cpuPercent;
 
-                        auto& cpuHistory = cpuHistoryByPid[entry.th32ProcessID];
+                    auto& cpuHistory = cpuHistoryByPid[entry.th32ProcessID];
+                    if (!hasValidCpuBaseline)
+                    {
+                        // A missing system-time baseline means cpuPercent is
+                        // only a safe fallback value, not a real measurement.
+                        // Clear stale history so the next valid sample does not
+                        // compare against an artificial zero and trigger a
+                        // false spike alert.
+                        cpuHistory.clear();
+                    }
+                    else
+                    {
                         if (!cpuHistory.empty())
                         {
                             double cpuDiff = cpuPercent - cpuHistory.back();
@@ -219,20 +226,23 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
                                         info,
                                         "Process CPU",
                                         cpuPercent,
-                                    "CPU spike detected"
+                                        "CPU spike detected"
                                     )
                                 });
                             }
                         }
 
+                        // CPU visibility should not depend on memory
+                        // footprint, but spike history must only use validated
+                        // measurements with a real system-time baseline.
                         cpuHistory.push_back(cpuPercent);
                         if (cpuHistory.size() > maxHistory)
                         {
                             cpuHistory.pop_front();
                         }
-
-                        previousProcessTimes[entry.th32ProcessID] = processTime;
                     }
+
+                    previousProcessTimes[entry.th32ProcessID] = processTime;
                 }
 
                 if (hasMemoryInfo && hasProcessTimes)

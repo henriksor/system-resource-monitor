@@ -1,4 +1,5 @@
 #include "AnomalyDetector.h"
+#include <algorithm>
 
 AnomalyDetector::AnomalyDetector(
     double cpuT,
@@ -15,7 +16,9 @@ AnomalyDetector::AnomalyDetector(
       ramSpikeThreshold(ramSpikeT),
       cpuLeakThreshold(cpuLeakT),
       ramLeakThreshold(ramLeakT),
-      maxHistory(history)
+      // Leak/spike logic needs at least two samples to compare current data to
+      // prior history, so clamp invalid inputs to a safe minimum.
+      maxHistory(std::max<size_t>(history, 2))
 {
 }
 

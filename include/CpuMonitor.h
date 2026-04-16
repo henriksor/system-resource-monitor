@@ -15,5 +15,5 @@ private:
     CpuTimes previous{};
     bool hasPrevious = false;
 
-    CpuTimes getCurrentTimes();
+    bool getCurrentTimes(CpuTimes& times) const;
 };
