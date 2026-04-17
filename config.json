@@ -9,7 +9,10 @@
   },
   "leak": {
     "cpu": 15,
-    "ram": 15
+    "ram": {
+      "percent": 15,
+      "mb": 15
+    }
   },
   "historySize": 5,
   "logFile": "logs/system_log.csv"
