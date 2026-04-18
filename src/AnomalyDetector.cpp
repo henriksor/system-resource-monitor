@@ -22,7 +22,10 @@ AnomalyDetector::AnomalyDetector(
 {
 }
 
-std::vector<Alert> AnomalyDetector::check(double cpuPercent, double ramPercent)
+std::vector<Alert> AnomalyDetector::check(
+    const std::optional<double>& cpuPercent,
+    const std::optional<double>& ramPercent
+)
 {
     addToHistory(cpuPercent, ramPercent);
 
@@ -39,41 +42,58 @@ std::vector<Alert> AnomalyDetector::check(double cpuPercent, double ramPercent)
     return alerts;
 }
 
-void AnomalyDetector::addToHistory(double cpuPercent, double ramPercent)
+void AnomalyDetector::addToHistory(
+    const std::optional<double>& cpuPercent,
+    const std::optional<double>& ramPercent
+)
 {
-    cpuHistory.push_back(cpuPercent);
-    ramHistory.push_back(ramPercent);
+    if (cpuPercent.has_value())
+    {
+        cpuHistory.push_back(*cpuPercent);
 
-    if (cpuHistory.size() > maxHistory)
-        cpuHistory.erase(cpuHistory.begin());
+        if (cpuHistory.size() > maxHistory)
+        {
+            cpuHistory.erase(cpuHistory.begin());
+        }
+    }
 
-    if (ramHistory.size() > maxHistory)
-        ramHistory.erase(ramHistory.begin());
+    if (ramPercent.has_value())
+    {
+        ramHistory.push_back(*ramPercent);
+
+        if (ramHistory.size() > maxHistory)
+        {
+            ramHistory.erase(ramHistory.begin());
+        }
+    }
 }
 
-std::vector<Alert> AnomalyDetector::checkThreshold(double cpuPercent, double ramPercent)
+std::vector<Alert> AnomalyDetector::checkThreshold(
+    const std::optional<double>& cpuPercent,
+    const std::optional<double>& ramPercent
+)
 {
     std::vector<Alert> alerts;
 
-    if (cpuPercent > cpuThreshold)
+    if (cpuPercent.has_value() && *cpuPercent > cpuThreshold)
     {
         alerts.push_back({
             "CPU",
             AlertType::Threshold,
             Severity::Warning,
-            cpuPercent,
+            *cpuPercent,
             cpuThreshold,
             "CPU exceeded threshold"
         });
     }
 
-    if (ramPercent > ramThreshold)
+    if (ramPercent.has_value() && *ramPercent > ramThreshold)
     {
         alerts.push_back({
             "RAM",
             AlertType::Threshold,
             Severity::Warning,
-            ramPercent,
+            *ramPercent,
             ramThreshold,
             "RAM exceeded threshold"
         });
@@ -82,13 +102,16 @@ std::vector<Alert> AnomalyDetector::checkThreshold(double cpuPercent, double ram
     return alerts;
 }
 
-std::vector<Alert> AnomalyDetector::checkSpike(double cpuPercent, double ramPercent)
+std::vector<Alert> AnomalyDetector::checkSpike(
+    const std::optional<double>& cpuPercent,
+    const std::optional<double>& ramPercent
+)
 {
     std::vector<Alert> alerts;
 
-    if (cpuHistory.size() >= 2)
+    if (cpuPercent.has_value() && cpuHistory.size() >= 2)
     {
-        double cpuDiff = cpuPercent - cpuHistory[cpuHistory.size() - 2];
+        double cpuDiff = *cpuPercent - cpuHistory[cpuHistory.size() - 2];
 
         if (cpuDiff > cpuSpikeThreshold)
         {
@@ -96,16 +119,16 @@ std::vector<Alert> AnomalyDetector::checkSpike(double cpuPercent, double ramPerc
                 "CPU",
                 AlertType::Spike,
                 Severity::Warning,
-                cpuPercent,
+                *cpuPercent,
                 cpuDiff,
                 "CPU spike detected"
             });
         }
     }
 
-    if (ramHistory.size() >= 2)
+    if (ramPercent.has_value() && ramHistory.size() >= 2)
     {
-        double ramDiff = ramPercent - ramHistory[ramHistory.size() - 2];
+        double ramDiff = *ramPercent - ramHistory[ramHistory.size() - 2];
 
         if (ramDiff > ramSpikeThreshold)
         {
@@ -113,7 +136,7 @@ std::vector<Alert> AnomalyDetector::checkSpike(double cpuPercent, double ramPerc
                 "RAM",
                 AlertType::Spike,
                 Severity::Warning,
-                ramPercent,
+                *ramPercent,
                 ramDiff,
                 "RAM spike detected"
             });
@@ -123,38 +146,41 @@ std::vector<Alert> AnomalyDetector::checkSpike(double cpuPercent, double ramPerc
     return alerts;
 }
 
-std::vector<Alert> AnomalyDetector::checkLeak(double cpuPercent, double ramPercent)
+std::vector<Alert> AnomalyDetector::checkLeak(
+    const std::optional<double>& cpuPercent,
+    const std::optional<double>& ramPercent
+)
 {
     std::vector<Alert> alerts;
 
-    if (cpuHistory.size() >= maxHistory)
+    if (cpuPercent.has_value() && cpuHistory.size() >= maxHistory)
     {
         double avgCpu = calculateAverage(cpuHistory);
 
-        if (cpuPercent - avgCpu > cpuLeakThreshold)
+        if (*cpuPercent - avgCpu > cpuLeakThreshold)
         {
             alerts.push_back({
                 "CPU",
                 AlertType::Leak,
                 Severity::Critical,
-                cpuPercent,
+                *cpuPercent,
                 avgCpu,
                 "CPU leak/trend detected"
             });
         }
     }
 
-    if (ramHistory.size() >= maxHistory)
+    if (ramPercent.has_value() && ramHistory.size() >= maxHistory)
     {
         double avgRam = calculateAverage(ramHistory);
 
-        if (ramPercent - avgRam > ramLeakThreshold)
+        if (*ramPercent - avgRam > ramLeakThreshold)
         {
             alerts.push_back({
                 "RAM",
                 AlertType::Leak,
                 Severity::Critical,
-                ramPercent,
+                *ramPercent,
                 avgRam,
                 "RAM leak/trend detected"
             });

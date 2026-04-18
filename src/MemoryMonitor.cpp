@@ -1,7 +1,7 @@
 #include <windows.h>
 #include "MemoryMonitor.h"
 
-MemoryMonitor::MemoryStatus MemoryMonitor::getStatus() const
+std::optional<MemoryMonitor::MemoryStatus> MemoryMonitor::getStatus() const
 {
     MemoryStatus status{};
 
@@ -10,9 +10,7 @@ MemoryMonitor::MemoryStatus MemoryMonitor::getStatus() const
 
     if (GlobalMemoryStatusEx(&statex) == FALSE)
     {
-        // Return a zeroed status when the OS query fails so callers do not
-        // accidentally use uninitialized memory as if it were real telemetry.
-        return status;
+        return std::nullopt;
     }
 
     status.totalBytes = statex.ullTotalPhys;

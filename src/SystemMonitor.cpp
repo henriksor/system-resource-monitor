@@ -1,12 +1,100 @@
 #include <iostream>
 #include <windows.h>
-#include <iomanip>
-#include <csignal>
 #include <algorithm>
-#include <unordered_set>
+#include <csignal>
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
+#include <future>
+#include <memory>
 
 #include "SystemMonitor.h"
 #include "ConfigManager.h"
+
+namespace {
+constexpr size_t MAX_ALERT_TASKS = 8;
+constexpr size_t MAX_PENDING_ALERTS = 64;
+
+std::filesystem::path getExecutablePath()
+{
+    std::wstring buffer(MAX_PATH, L'\0');
+
+    while (true)
+    {
+        DWORD length = GetModuleFileNameW(
+            nullptr,
+            buffer.data(),
+            static_cast<DWORD>(buffer.size())
+        );
+
+        if (length == 0)
+        {
+            throw std::runtime_error("Could not resolve executable path");
+        }
+
+        if (length < buffer.size() - 1)
+        {
+            buffer.resize(length);
+            return std::filesystem::path(buffer);
+        }
+
+        buffer.resize(buffer.size() * 2);
+    }
+}
+
+std::filesystem::path findFileInParents(
+    const std::filesystem::path& start,
+    const std::filesystem::path& relativePath
+)
+{
+    auto current = std::filesystem::absolute(start);
+
+    while (!current.empty())
+    {
+        const auto candidate = current / relativePath;
+        if (std::filesystem::exists(candidate))
+        {
+            return candidate;
+        }
+
+        if (current == current.root_path())
+        {
+            break;
+        }
+
+        current = current.parent_path();
+    }
+
+    return {};
+}
+
+std::filesystem::path resolveRuntimeRoot()
+{
+    const auto executableDirectory = getExecutablePath().parent_path();
+
+    if (const auto configPath =
+            findFileInParents(executableDirectory, "config.json");
+        !configPath.empty())
+    {
+        return configPath.parent_path();
+    }
+
+    if (const auto configPath =
+            findFileInParents(std::filesystem::current_path(), "config.json");
+        !configPath.empty())
+    {
+        return configPath.parent_path();
+    }
+
+    throw std::runtime_error("Could not locate config.json");
+}
+
+std::string getEnvironmentVariable(const char* name)
+{
+    const char* value = std::getenv(name);
+    return value != nullptr ? value : "";
+}
+} // namespace
 
 // pointer used for Ctrl+C handling
 static SystemMonitor* instance = nullptr;
@@ -34,14 +122,184 @@ void SystemMonitor::stop()
     running = false;
 }
 
+void SystemMonitor::launchAlertTask(const Alert& alert, AlertHandler* handler)
+{
+    alertTasks.push_back(std::async(
+        std::launch::async,
+        [handler, alert]()
+        {
+            handler->handle(alert);
+        }
+    ));
+}
+
+void SystemMonitor::dispatchAlerts(const SystemSnapshot& snapshot)
+{
+    pruneCompletedAlertTasks();
+    drainPendingAlerts();
+
+    for (const auto& alert : snapshot.alerts)
+    {
+        if (alert.severity == Severity::Info)
+        {
+            continue;
+        }
+
+        for (const auto& alertHandler : alertHandlers)
+        {
+            pruneCompletedAlertTasks();
+            drainPendingAlerts();
+
+            if (alertTasks.size() >= MAX_ALERT_TASKS)
+            {
+                if (alert.severity == Severity::Critical)
+                {
+                    try
+                    {
+                        alertHandler->handle(alert);
+                    }
+                    catch (const std::exception& ex)
+                    {
+                        std::cerr << "Alert handler failed: "
+                                  << ex.what() << "\n";
+                    }
+                    catch (...)
+                    {
+                        std::cerr
+                            << "Alert handler failed with an unknown error.\n";
+                    }
+                }
+                else
+                {
+                    if (pendingAlerts.size() >= MAX_PENDING_ALERTS)
+                    {
+                        pendingAlerts.pop_front();
+                        std::cerr
+                            << "[ALERT] Dropped oldest pending warning due to "
+                               "queue limit\n";
+                    }
+
+                    pendingAlerts.push_back(PendingAlert{
+                        alert,
+                        alertHandler.get()
+                    });
+                }
+
+                continue;
+            }
+
+            launchAlertTask(alert, alertHandler.get());
+        }
+    }
+}
+
+void SystemMonitor::drainPendingAlerts()
+{
+    while (alertTasks.size() < MAX_ALERT_TASKS && !pendingAlerts.empty())
+    {
+        PendingAlert pendingAlert = pendingAlerts.front();
+        pendingAlerts.pop_front();
+        launchAlertTask(pendingAlert.alert, pendingAlert.handler);
+    }
+}
+
+void SystemMonitor::pruneCompletedAlertTasks()
+{
+    alertTasks.erase(
+        std::remove_if(
+            alertTasks.begin(),
+            alertTasks.end(),
+            [](std::future<void>& task)
+            {
+                if (task.wait_for(std::chrono::seconds(0)) !=
+                    std::future_status::ready)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    task.get();
+                }
+                catch (const std::exception& ex)
+                {
+                    std::cerr << "Alert handler failed: "
+                              << ex.what() << "\n";
+                }
+                catch (...)
+                {
+                    std::cerr << "Alert handler failed with an unknown error.\n";
+                }
+
+                return true;
+            }
+        ),
+        alertTasks.end()
+    );
+}
+
+void SystemMonitor::waitForAlertTasks()
+{
+    for (auto& task : alertTasks)
+    {
+        try
+        {
+            task.get();
+        }
+        catch (const std::exception& ex)
+        {
+            std::cerr << "Alert handler failed: "
+                      << ex.what() << "\n";
+        }
+        catch (...)
+        {
+            std::cerr << "Alert handler failed with an unknown error.\n";
+        }
+    }
+
+    alertTasks.clear();
+}
+
+SystemSnapshot SystemMonitor::collectSnapshot()
+{
+    SystemSnapshot snapshot;
+
+    snapshot.cpuPercent = cpu.getUsage();
+
+    if (const auto memoryStatus = memory.getStatus(); memoryStatus.has_value())
+    {
+        snapshot.ramPercent = memoryStatus->percentUsed;
+        snapshot.memory = SystemSnapshot::MemoryDetails{
+            memoryStatus->usedBytes,
+            memoryStatus->totalBytes,
+            memoryStatus->availableBytes
+        };
+    }
+
+    snapshot.alerts = detector.check(
+        snapshot.cpuPercent,
+        snapshot.ramPercent
+    );
+
+    auto processResult = processMonitor.getProcesses();
+    snapshot.processes = std::move(processResult.processes);
+    snapshot.alerts.insert(
+        snapshot.alerts.end(),
+        processResult.alerts.begin(),
+        processResult.alerts.end()
+    );
+
+    return snapshot;
+}
+
 SystemMonitor::SystemMonitor()
-    : config("config.json"),
+    : runtimeRoot(resolveRuntimeRoot()),
+      config((runtimeRoot / "config.json").string()),
       processMonitor(
           config.cpuSpikeThreshold(),
           config.ramLeakThresholdMb(),
           config.historySize()
       ),
-      logger(config.logFile()),
       detector(
           config.cpuThreshold(),
           config.ramThreshold(),
@@ -52,6 +310,38 @@ SystemMonitor::SystemMonitor()
           config.historySize()
       )
 {
+    const auto logPath = std::filesystem::path(config.logFile());
+    const auto resolvedLogPath =
+        logPath.is_absolute() ? logPath : runtimeRoot / logPath;
+    const auto snapshotPath = runtimeRoot / "dashboard" / "latest_snapshot.json";
+
+    // Register outputs centrally so collection stays independent of any
+    // specific presentation or integration target.
+    outputHandlers.push_back(std::make_unique<ConsoleOutputHandler>());
+    outputHandlers.push_back(
+        std::make_unique<CsvLoggerOutputHandler>(resolvedLogPath.string())
+    );
+    outputHandlers.push_back(
+        std::make_unique<JsonSnapshotOutputHandler>(snapshotPath)
+    );
+
+    const std::string webhookUrl =
+        getEnvironmentVariable("SYSTEM_MONITOR_WEBHOOK_URL");
+    if (!webhookUrl.empty())
+    {
+        alertHandlers.push_back(
+            std::make_unique<WebhookAlertHandler>(webhookUrl)
+        );
+    }
+
+    const std::string emailRecipient =
+        getEnvironmentVariable("SYSTEM_MONITOR_EMAIL_TO");
+    if (!emailRecipient.empty())
+    {
+        alertHandlers.push_back(
+            std::make_unique<EmailAlertHandler>(emailRecipient)
+        );
+    }
 }
 
 void SystemMonitor::run()
@@ -64,193 +354,31 @@ void SystemMonitor::run()
 
     while (running)
     {
-        constexpr int nameWidth = 30;
-        constexpr int pidWidth = 8;
-        constexpr int cpuWidth = 10;
-        constexpr int ramWidth = 12;
+        const auto snapshot = collectSnapshot();
 
-        // Clear screen using ANSI escape codes
-        std::cout << "\x1B[2J\x1B[H";
-
-        auto mem = memory.getStatus();
-        double cpuPercent = cpu.getUsage();
-
-        std::cout << std::fixed << std::setprecision(2);
-
-        std::cout << "CPU Usage: " << cpuPercent << " %\n\n";
-
-        std::cout << "Memory Usage: " << mem.percentUsed << " %\n";
-        std::cout << "Total: " << mem.totalBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
-
-        std::cout << "Available: " << mem.availableBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
-
-        std::cout << "Used: " << mem.usedBytes / 1024.0 / 1024.0 / 1024.0 << " GB\n";
-
-        logger.logSystem(cpuPercent, mem.percentUsed, mem.usedBytes);
-
-        auto alerts = detector.check(cpuPercent, mem.percentUsed);
-
-        auto processResult = processMonitor.getProcesses();
-        auto processes = processResult.processes;
-
-        alerts.insert(
-            alerts.end(),
-            processResult.alerts.begin(),
-            processResult.alerts.end()
-        );
-
-        auto processesCpu = processes;
-
-        std::sort(processesCpu.begin(), processesCpu.end(),
-            [](const ProcessInfo& a, const ProcessInfo& b)
+        for (const auto& outputHandler : outputHandlers)
+        {
+            try
             {
-                return a.cpuPercent > b.cpuPercent;
-            });
-
-        std::sort(processes.begin(), processes.end(),
-            [](const ProcessInfo& a, const ProcessInfo& b)
-            {
-                return a.ramBytes > b.ramBytes;
-            });
-
-
-        std::cout << "\n===== TOP 5 CPU =====\n";
-
-        size_t topCpuCount = std::min<size_t>(5, processesCpu.size());
-        size_t topRamCount = std::min<size_t>(5, processes.size());
-        uint64_t totalRamBytes = mem.totalBytes;
-        std::unordered_set<DWORD> highlightedPids;
-        std::vector<ProcessInfo> topCpuProcesses(
-            processesCpu.begin(),
-            processesCpu.begin() + topCpuCount
-        );
-        std::vector<ProcessInfo> topRamProcesses(
-            processes.begin(),
-            processes.begin() + topRamCount
-        );
-
-        logger.logProcesses(topCpuProcesses, topRamProcesses);
-
-        auto printProcessTableHeader = [&]()
-        {
-            std::cout << std::left
-                    << std::setw(nameWidth) << "Name"
-                    << std::right
-                    << std::setw(pidWidth) << "PID"
-                    << std::setw(cpuWidth) << "CPU%"
-                    << std::setw(ramWidth) << "RAM MB"
-                    << "\n";
-
-            std::cout << std::left
-                    << std::setw(nameWidth) << std::string(nameWidth - 1, '-')
-                    << std::right
-                    << std::setw(pidWidth) << std::string(pidWidth - 1, '-')
-                    << std::setw(cpuWidth) << std::string(cpuWidth - 1, '-')
-                    << std::setw(ramWidth) << std::string(ramWidth - 1, '-')
-                    << "\n";
-        };
-
-        auto printProcessRow = [&](const ProcessInfo& p)
-        {
-            double ramMb =
-                static_cast<double>(p.ramBytes) / 1024.0 / 1024.0;
-
-            std::cout << std::left
-                    << std::setw(nameWidth) << p.name.substr(0, nameWidth - 1)
-                    << std::right
-                    << std::setw(pidWidth) << p.pid
-                    << std::setw(cpuWidth) << p.cpuPercent
-                    << std::setw(ramWidth) << ramMb
-                    << "\n";
-        };
-
-        printProcessTableHeader();
-
-        for (const auto& p : topCpuProcesses)
-        {
-            highlightedPids.insert(p.pid);
-
-            printProcessRow(p);
-        }
-
-        std::cout << "\n===== TOP 5 RAM CONSUMERS =====\n";
-
-        printProcessTableHeader();
-
-        for (const auto& p : topRamProcesses)
-        {
-            highlightedPids.insert(p.pid);
-
-            printProcessRow(p);
-        }
-
-        std::cout << "\n===== OTHER PROCESSES > 1% CPU OR RAM =====\n";
-
-        for (const auto& p : processes)
-        {
-            if (highlightedPids.count(p.pid) > 0)
-            {
-                continue;
+                outputHandler->handle(snapshot);
             }
-
-            double ramPercent =
-                totalRamBytes > 0
-                    ? (static_cast<double>(p.ramBytes) /
-                       static_cast<double>(totalRamBytes)) * 100.0
-                    : 0.0;
-            bool ramOverThreshold = ramPercent > 1.0;
-            bool cpuOverThreshold = p.cpuPercent > 1.0;
-
-            if (ramOverThreshold || cpuOverThreshold)
+            catch (const std::exception& ex)
             {
-                std::string metricsLabel;
-
-                if (cpuOverThreshold && ramOverThreshold)
-                {
-                    metricsLabel = "CPU & RAM";
-                }
-                else if (cpuOverThreshold)
-                {
-                    metricsLabel = "CPU";
-                }
-                else
-                {
-                    metricsLabel = "RAM";
-                }
-
-                std::cout << p.name
-                        << " (PID: " << p.pid << ") "
-                        << "[" << metricsLabel << "] "
-                        << "CPU: " << p.cpuPercent << " %, "
-                        << "RAM: " << ramPercent << " %\n";
+                std::cerr << "Output handler failed: " << ex.what() << "\n";
+            }
+            catch (...)
+            {
+                std::cerr << "Output handler failed with an unknown error.\n";
             }
         }
 
-        for (const auto& alert : alerts)
-        {
-            switch (alert.severity)
-            {
-                case Severity::Info:
-                    std::cout << "\x1B[34m";
-                    break;
-                case Severity::Warning:
-                    std::cout << "\x1B[33m";
-                    break;
-                case Severity::Critical:
-                    std::cout << "\x1B[31m";
-                    break;
-            }
-
-            std::cout << alert.message
-                    << " (" << alert.metric << ": "
-                    << alert.value << ")\n";
-
-            std::cout << "\x1B[0m";
-
-            logger.logAlert(alert);
-        }
+        dispatchAlerts(snapshot);
+        pruneCompletedAlertTasks();
+        drainPendingAlerts();
 
         Sleep(1000);
     }
+
+    waitForAlertTasks();
     std::cout << "System monitor stopped.\n";
 }

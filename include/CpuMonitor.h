@@ -1,9 +1,10 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 
 class CpuMonitor {
 public:
-    double getUsage();
+    std::optional<double> getUsage();
 
 private:
     struct CpuTimes {

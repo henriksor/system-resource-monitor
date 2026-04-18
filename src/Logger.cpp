@@ -113,14 +113,31 @@ std::filesystem::path Logger::deriveSiblingPath(
 }
 
 void Logger::logSystem(
-    double cpuPercent,
-    double ramPercent,
-    uint64_t ramUsedBytes
+    const std::optional<double>& cpuPercent,
+    const std::optional<double>& ramPercent,
+    const std::optional<uint64_t>& ramUsedBytes
 )
 {
-    systemFile << cpuPercent << ","
-               << ramPercent << ","
-               << ramUsedBytes << "\n";
+    if (cpuPercent.has_value())
+    {
+        systemFile << *cpuPercent;
+    }
+
+    systemFile << ",";
+
+    if (ramPercent.has_value())
+    {
+        systemFile << *ramPercent;
+    }
+
+    systemFile << ",";
+
+    if (ramUsedBytes.has_value())
+    {
+        systemFile << *ramUsedBytes;
+    }
+
+    systemFile << "\n";
 }
 
 void Logger::logProcesses(

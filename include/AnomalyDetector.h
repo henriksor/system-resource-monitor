@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 #include "Alert.h"
 
@@ -15,14 +16,29 @@ public:
         size_t historySize
     );
 
-    std::vector<Alert> check(double cpuPercent, double ramPercent);
+    std::vector<Alert> check(
+        const std::optional<double>& cpuPercent,
+        const std::optional<double>& ramPercent
+    );
 
 private:
-    void addToHistory(double cpuPercent, double ramPercent);
+    void addToHistory(
+        const std::optional<double>& cpuPercent,
+        const std::optional<double>& ramPercent
+    );
 
-    std::vector<Alert> checkThreshold(double cpuPercent, double ramPercent);
-    std::vector<Alert> checkSpike(double cpuPercent, double ramPercent);
-    std::vector<Alert> checkLeak(double cpuPercent, double ramPercent);
+    std::vector<Alert> checkThreshold(
+        const std::optional<double>& cpuPercent,
+        const std::optional<double>& ramPercent
+    );
+    std::vector<Alert> checkSpike(
+        const std::optional<double>& cpuPercent,
+        const std::optional<double>& ramPercent
+    );
+    std::vector<Alert> checkLeak(
+        const std::optional<double>& cpuPercent,
+        const std::optional<double>& ramPercent
+    );
 
     double calculateAverage(const std::vector<double>& values) const;
 

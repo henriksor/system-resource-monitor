@@ -1,11 +1,9 @@
 # System Resource Monitor
 
 `SystemResourceMonitor` is a Windows-based C++ monitoring tool that tracks
-system CPU and memory usage, surfaces the top memory and CPU-consuming
-processes, and detects both system-level and per-process anomalies.
-
-The current version focuses on a simple terminal dashboard plus CSV logging for
-system metrics, process snapshots, and alerts.
+system CPU and memory usage, surfaces the top CPU and memory-consuming
+processes, detects both system-level and per-process anomalies, and publishes
+the latest monitoring snapshot to multiple output targets.
 
 ## Features
 
@@ -25,6 +23,10 @@ system metrics, process snapshots, and alerts.
   - `logs/system_log.csv`
   - `logs/process_log.csv`
   - `logs/alert_log.csv`
+- JSON snapshot publishing for a lightweight web dashboard:
+  - `dashboard/latest_snapshot.json`
+- Extensible output pipeline via `OutputHandler`
+- Extensible external alert delivery via `AlertHandler`
 - Graceful shutdown with `Ctrl+C`
 
 ## Current Behavior
@@ -47,9 +49,6 @@ The monitor refreshes continuously and prints:
 
 - Process CPU usage is calculated using deltas between samples.
 - Per-process CPU history is preserved inside `ProcessMonitor`.
-- CPU timing is only collected for processes using at least `0.1%` of total
-  physical RAM. This reduces the cost of calling `GetProcessTimes()` for very
-  small processes.
 - Per-process history is cleaned up automatically when a PID disappears, so the
   internal tracking maps do not grow indefinitely.
 
@@ -113,6 +112,16 @@ All alerts with a consistent schema:
 - Reference
 - Message
 
+### `dashboard/latest_snapshot.json`
+
+The latest full `SystemSnapshot` serialized as JSON for the dashboard frontend:
+
+- CPU percentage
+- RAM percentage
+- Memory details
+- Process list
+- Alert list
+
 ## Configuration
 
 Runtime configuration lives in [config.json](C:/Code/projects/system-resource-monitor/config.json).
@@ -124,7 +133,8 @@ Current configuration fields:
 - `spike.cpu`
 - `spike.ram`
 - `leak.cpu`
-- `leak.ram`
+- `leak.ram.percent`
+- `leak.ram.mb`
 - `historySize`
 - `logFile`
 
@@ -142,7 +152,10 @@ Example:
   },
   "leak": {
     "cpu": 15,
-    "ram": 15
+    "ram": {
+      "percent": 15,
+      "mb": 15
+    }
   },
   "historySize": 5,
   "logFile": "logs/system_log.csv"
@@ -174,10 +187,28 @@ After building:
 
 Stop the monitor with `Ctrl+C`.
 
+### Dashboard
+
+The project includes a static dashboard in `dashboard/` that reads
+`dashboard/latest_snapshot.json`.
+
+Serve the repository root with a lightweight static server:
+
+```powershell
+python -m http.server
+```
+
+Then open:
+
+```text
+http://localhost:8000/dashboard/
+```
+
 ## Project Structure
 
 - `src/` application source files
 - `include/` headers
+- `dashboard/` static web dashboard assets
 - `tests/` test-related files
 - `logs/` generated runtime logs
 - `external/json/` bundled JSON dependency
@@ -185,13 +216,17 @@ Stop the monitor with `Ctrl+C`.
 
 ## Implementation Overview
 
-- `SystemMonitor` orchestrates the main monitoring loop, console output, and
-  alert/log integration.
+- `SystemMonitor` orchestrates the main monitoring loop and builds a
+  `SystemSnapshot` each refresh.
 - `CpuMonitor` and `MemoryMonitor` collect system-wide metrics.
 - `ProcessMonitor` collects process snapshots and process-specific anomalies.
 - `AnomalyDetector` handles global CPU/RAM anomaly detection only.
+- `OutputHandler` implementations fan snapshots out to console, CSV, and JSON
+  outputs.
+- `AlertHandler` implementations deliver warning/critical alerts externally,
+  such as webhooks or mock email notifications.
 - `Logger` writes system metrics, process snapshots, and alerts to separate CSV
-  files.
+  files for the CSV output handler.
 - `ConfigManager` loads thresholds and history settings from `config.json`.
 
 ## Status
@@ -201,5 +236,8 @@ setup and reflects the current implementation, including:
 
 - split CSV logging
 - process table output
+- JSON dashboard snapshot publishing
+- output handler architecture
+- alert handler integration
 - per-process CPU spike detection
 - per-process RAM leak detection

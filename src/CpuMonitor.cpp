@@ -25,7 +25,7 @@ bool CpuMonitor::getCurrentTimes(CpuTimes& times) const
     return true;
 }
 
-double CpuMonitor::getUsage()
+std::optional<double> CpuMonitor::getUsage()
 {
     CpuTimes current{};
     if (!getCurrentTimes(current))
@@ -33,14 +33,14 @@ double CpuMonitor::getUsage()
         // Drop the previous baseline so the next successful read starts from
         // fresh data instead of combining a stale sample with a later one.
         hasPrevious = false;
-        return 0.0;
+        return std::nullopt;
     }
 
     if (!hasPrevious)
     {
         previous = current;
         hasPrevious = true;
-        return 0.0;
+        return std::nullopt;
     }
 
     uint64_t deltaIdle   = current.idle   - previous.idle;
@@ -52,7 +52,7 @@ double CpuMonitor::getUsage()
     previous = current;
 
     if (deltaTotal == 0)
-        return 0.0;
+        return std::nullopt;
 
     double usage =
         1.0 - (static_cast<double>(deltaIdle) / deltaTotal);
