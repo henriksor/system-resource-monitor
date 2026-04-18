@@ -4,6 +4,8 @@ project(SystemResourceMonitor)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+add_definitions(-DNOMINMAX)
+
 add_executable(SystemResourceMonitor
     src/main.cpp
     src/SystemMonitor.cpp
