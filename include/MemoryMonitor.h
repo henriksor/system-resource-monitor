@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 
 class MemoryMonitor {
 public:
@@ -10,5 +11,5 @@ public:
         double percentUsed;
     };
 
-    MemoryStatus getStatus() const;
+    std::optional<MemoryStatus> getStatus() const;
 };

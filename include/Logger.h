@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <cstdint>
 #include <vector>
@@ -13,7 +14,11 @@ class Logger {
 public:
     explicit Logger(const std::string& filename);
 
-    void logSystem(double cpuPercent, double ramPercent, uint64_t ramUsedBytes);
+    void logSystem(
+        const std::optional<double>& cpuPercent,
+        const std::optional<double>& ramPercent,
+        const std::optional<uint64_t>& ramUsedBytes
+    );
     void logProcesses(
         const std::vector<ProcessInfo>& topCpuProcesses,
         const std::vector<ProcessInfo>& topRamProcesses

@@ -4,3 +4,5 @@ build/
 *.pdb
 *.log
 .vscode/
+logs/
+dashboard/latest_snapshot.json

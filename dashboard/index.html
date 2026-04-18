@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Resource Monitor</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="dashboard">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">System Monitor</p>
+        <h1>Live Resource Dashboard</h1>
+      </div>
+      <p id="statusText" class="status">Waiting for data...</p>
+    </header>
+
+    <section class="metric-grid">
+      <article class="card metric-card">
+        <h2>CPU</h2>
+        <p id="cpuValue" class="metric-value">--</p>
+      </article>
+      <article class="card metric-card">
+        <h2>RAM</h2>
+        <p id="ramValue" class="metric-value">--</p>
+      </article>
+      <article class="card memory-card">
+        <h2>Memory Usage</h2>
+        <dl class="memory-details">
+          <div>
+            <dt>Used</dt>
+            <dd id="memoryUsed">--</dd>
+          </div>
+          <div>
+            <dt>Available</dt>
+            <dd id="memoryAvailable">--</dd>
+          </div>
+          <div>
+            <dt>Total</dt>
+            <dd id="memoryTotal">--</dd>
+          </div>
+        </dl>
+      </article>
+    </section>
+
+    <section class="content-grid">
+      <article class="card">
+        <div class="section-header">
+          <h2>Top 10 Processes</h2>
+          <p>Sorted by CPU usage</p>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>PID</th>
+                <th>CPU %</th>
+                <th>RAM MB</th>
+              </tr>
+            </thead>
+            <tbody id="processTableBody">
+              <tr>
+                <td colspan="4" class="empty-state">No process data yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="section-header">
+          <h2>Alerts</h2>
+          <p>Latest snapshot alerts</p>
+        </div>
+        <ul id="alertList" class="alert-list">
+          <li class="empty-state">No alerts yet.</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

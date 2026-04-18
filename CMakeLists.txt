@@ -4,9 +4,13 @@ project(SystemResourceMonitor)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+add_definitions(-DNOMINMAX)
+
 add_executable(SystemResourceMonitor
     src/main.cpp
     src/SystemMonitor.cpp
+    src/AlertHandler.cpp
+    src/OutputHandler.cpp
     src/CpuMonitor.cpp
     src/MemoryMonitor.cpp
     src/Logger.cpp
@@ -19,4 +23,9 @@ target_include_directories(SystemResourceMonitor
     PRIVATE
         ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_SOURCE_DIR}/external/json
+)
+
+target_link_libraries(SystemResourceMonitor
+    PRIVATE
+        winhttp
 )
