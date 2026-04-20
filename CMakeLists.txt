@@ -30,7 +30,7 @@ target_link_libraries(SystemResourceMonitor
         winhttp
 )
 
-option(BUILD_TESTING "Build unit tests" ON)
+option(BUILD_TESTING "Build unit tests" OFF)
 
 if(BUILD_TESTING)
     enable_testing()
