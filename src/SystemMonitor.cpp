@@ -412,6 +412,7 @@ SystemMonitor::~SystemMonitor()
 {
     if (singleInstanceMutex != nullptr)
     {
+        ReleaseMutex(singleInstanceMutex);
         CloseHandle(singleInstanceMutex);
         singleInstanceMutex = nullptr;
     }
