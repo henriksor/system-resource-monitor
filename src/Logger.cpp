@@ -58,6 +58,8 @@ std::string escapeCsvField(const std::string& value)
 
 Logger::Logger(const std::string& filename)
     : systemLogPath(filename),
+      processLogPath(deriveSiblingPath("process_log.csv")),
+      alertLogPath(deriveSiblingPath("alert_log.csv")),
       systemFile(
           openCsvFile(
               systemLogPath,
@@ -66,13 +68,13 @@ Logger::Logger(const std::string& filename)
       ),
       processFile(
           openCsvFile(
-              deriveSiblingPath("process_log.csv"),
+              processLogPath,
               "Category,Rank,Name,PID,CPU%,RAM_Bytes,RAM_MB\n"
           )
       ),
       alertFile(
           openCsvFile(
-              deriveSiblingPath("alert_log.csv"),
+              alertLogPath,
               "Metric,Type,Severity,Value,Reference,Message\n"
           )
       )
@@ -100,6 +102,12 @@ std::ofstream Logger::openCsvFile(
         std::filesystem::file_size(path) == 0)
     {
         file << header;
+        if (!file.good())
+        {
+            throw std::runtime_error(
+                "Could not write log file header: " + path.string()
+            );
+        }
     }
 
     return file;
@@ -138,6 +146,7 @@ void Logger::logSystem(
     }
 
     systemFile << "\n";
+    ensureWritable(systemFile, systemLogPath);
 }
 
 void Logger::logProcesses(
@@ -147,6 +156,7 @@ void Logger::logProcesses(
 {
     logProcessGroup("TOP_CPU", topCpuProcesses);
     logProcessGroup("TOP_RAM", topRamProcesses);
+    ensureWritable(processFile, processLogPath);
 }
 
 void Logger::logProcessGroup(
@@ -178,4 +188,28 @@ void Logger::logAlert(const Alert& alert)
               << alert.value << ","
               << alert.reference << ","
               << escapeCsvField(alert.message) << "\n";
+    ensureWritable(alertFile, alertLogPath);
+}
+
+void Logger::flush()
+{
+    systemFile.flush();
+    ensureWritable(systemFile, systemLogPath);
+
+    processFile.flush();
+    ensureWritable(processFile, processLogPath);
+
+    alertFile.flush();
+    ensureWritable(alertFile, alertLogPath);
+}
+
+void Logger::ensureWritable(
+    const std::ofstream& file,
+    const std::filesystem::path& path
+) const
+{
+    if (!file.good())
+    {
+        throw std::runtime_error("Failed to write log file: " + path.string());
+    }
 }

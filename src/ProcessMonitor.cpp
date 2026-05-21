@@ -48,7 +48,6 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
     ProcessMonitorResult result;
     std::unordered_set<DWORD> activePids;
 
-    // Get system CPU time
     FILETIME idleTime, kernelTime, userTime;
     bool hasSystemTimes =
         GetSystemTimes(&idleTime, &kernelTime, &userTime) != FALSE;
@@ -66,7 +65,6 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
         totalPhysicalMemory = memoryStatus.ullTotalPhys;
     }
 
-    // Snapshot of processes
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE)
         return result;
@@ -132,7 +130,6 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
                     ramHistoryByPid.erase(entry.th32ProcessID);
                 }
 
-                // RAM
                 PROCESS_MEMORY_COUNTERS pmc{};
                 if (GetProcessMemoryInfo(processHandle, &pmc, sizeof(pmc)))
                 {
@@ -361,7 +358,6 @@ ProcessMonitorResult ProcessMonitor::getProcesses()
         }
     }
 
-    // Update systemhistory
     previousSystemTime = systemTime;
 
     return result;

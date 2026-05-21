@@ -249,6 +249,8 @@ void CsvLoggerOutputHandler::handle(const SystemSnapshot& snapshot)
     {
         logger.logAlert(alert);
     }
+
+    logger.flush();
 }
 
 JsonSnapshotOutputHandler::JsonSnapshotOutputHandler(

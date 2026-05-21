@@ -1,10 +1,15 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 
 class ConfigManager {
 public:
     explicit ConfigManager(const std::string& path);
+    ConfigManager(
+        const std::string& path,
+        const std::filesystem::path& runtimeRoot
+    );
 
     double cpuThreshold() const;
     double ramThreshold() const;
@@ -22,6 +27,7 @@ public:
 
 private:
     void load(const std::string& path);
+    void validateLogFilePath(const std::filesystem::path& runtimeRoot);
 
     double m_cpuThreshold;
     double m_ramThreshold;
