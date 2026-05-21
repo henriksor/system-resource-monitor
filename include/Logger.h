@@ -24,6 +24,7 @@ public:
         const std::vector<ProcessInfo>& topRamProcesses
     );
     void logAlert(const Alert& alert);
+    void flush();
 
 private:
     std::ofstream openCsvFile(
@@ -37,8 +38,14 @@ private:
         const std::string& category,
         const std::vector<ProcessInfo>& processes
     );
+    void ensureWritable(
+        const std::ofstream& file,
+        const std::filesystem::path& path
+    ) const;
 
     std::filesystem::path systemLogPath;
+    std::filesystem::path processLogPath;
+    std::filesystem::path alertLogPath;
     std::ofstream systemFile;
     std::ofstream processFile;
     std::ofstream alertFile;

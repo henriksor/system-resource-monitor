@@ -1,4 +1,5 @@
 #include "ConfigManager.h"
+#include <algorithm>
 #include <fstream>
 #include <limits>
 #include <sstream>
@@ -94,11 +95,40 @@ std::string requireString(const json& parent, const char* key)
 
     return value;
 }
+
+bool pathStartsWith(
+    const std::filesystem::path& path,
+    const std::filesystem::path& base
+)
+{
+    auto pathIt = path.begin();
+    auto baseIt = base.begin();
+
+    for (; baseIt != base.end(); ++baseIt, ++pathIt)
+    {
+        if (pathIt == path.end() || *pathIt != *baseIt)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
 } // namespace
 
 ConfigManager::ConfigManager(const std::string& path)
 {
     load(path);
+    validateLogFilePath(std::filesystem::path(path).parent_path());
+}
+
+ConfigManager::ConfigManager(
+    const std::string& path,
+    const std::filesystem::path& runtimeRoot
+)
+{
+    load(path);
+    validateLogFilePath(runtimeRoot);
 }
 
 void ConfigManager::load(const std::string& path)
@@ -150,6 +180,40 @@ void ConfigManager::load(const std::string& path)
     m_historySize       = requireHistorySize(j, "historySize");
 
     m_logFile           = requireString(j, "logFile");
+}
+
+void ConfigManager::validateLogFilePath(
+    const std::filesystem::path& runtimeRoot
+)
+{
+    const auto root =
+        runtimeRoot.empty()
+            ? std::filesystem::current_path()
+            : std::filesystem::absolute(runtimeRoot);
+    const auto logsRoot =
+        std::filesystem::weakly_canonical(root / "logs");
+
+    const auto configuredPath = std::filesystem::path(m_logFile);
+    const auto candidate =
+        configuredPath.is_absolute()
+            ? configuredPath
+            : root / configuredPath;
+    const auto normalizedCandidate =
+        std::filesystem::weakly_canonical(candidate);
+
+    // Keep configured logging inside the runtime log directory even when the
+    // config uses absolute paths or parent-directory traversal.
+    if (!normalizedCandidate.has_filename() ||
+        normalizedCandidate == logsRoot ||
+        !pathStartsWith(normalizedCandidate, logsRoot))
+    {
+        throw std::runtime_error(
+            "Config field 'logFile' must resolve to a file under the logs "
+            "directory"
+        );
+    }
+
+    m_logFile = normalizedCandidate.string();
 }
 
 double ConfigManager::cpuThreshold() const { return m_cpuThreshold; }

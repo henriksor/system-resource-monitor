@@ -1,132 +1,68 @@
 # System Resource Monitor
 
-`SystemResourceMonitor` is a Windows-based C++ monitoring tool that tracks
-system CPU and memory usage, surfaces the top CPU and memory-consuming
-processes, detects both system-level and per-process anomalies, and publishes
-the latest monitoring snapshot to multiple output targets.
+`SystemResourceMonitor` is a Windows-based C++17 monitoring tool. It samples
+system CPU and memory usage, collects process-level CPU/RAM data, detects
+system and process anomalies, writes CSV logs, and publishes the latest snapshot
+for the static dashboard.
 
 ## Features
 
-- Live system monitoring for overall CPU and RAM usage
-- Per-refresh process table output for:
-  - Top 5 CPU consumers
-  - Top 5 RAM consumers
-  - Other processes above 1% CPU or RAM
-- System-wide anomaly detection for:
-  - Threshold breaches
-  - Sudden spikes
-  - Leak/trend behavior
-- Per-process anomaly detection for:
-  - CPU spikes
-  - RAM leak-style growth across recent samples
-- CSV logging split by concern:
+- Live system CPU and RAM monitoring
+- Process table output for top CPU/RAM consumers
+- System anomaly detection for thresholds, spikes, and leak/trend behavior
+- Process anomaly detection for CPU spikes and RAM growth patterns
+- CSV logs:
   - `logs/system_log.csv`
   - `logs/process_log.csv`
   - `logs/alert_log.csv`
-- JSON snapshot publishing for a lightweight web dashboard:
+- JSON dashboard snapshot:
   - `dashboard/latest_snapshot.json`
-- Extensible output pipeline via `OutputHandler`
-- Extensible external alert delivery via `AlertHandler`
+- Optional external alert delivery through webhook or mock email handlers
+- Single-instance runtime guard on Windows
 - Graceful shutdown with `Ctrl+C`
 
-## Current Behavior
+## Build
 
-The monitor refreshes continuously and prints:
+Requirements:
 
-- Current system CPU usage
-- Current system memory usage
-- A formatted process table with columns:
-  - `Name`
-  - `PID`
-  - `CPU%`
-  - `RAM MB`
-- Colored alerts in the console:
-  - Blue for info
-  - Yellow for warnings
-  - Red for critical alerts
+- Windows
+- CMake 3.16+
+- A C++17-capable compiler
 
-### Process monitoring notes
+Default local builds do not build tests. This avoids fetching test dependencies
+unless they are explicitly requested.
 
-- Process CPU usage is calculated using deltas between samples.
-- Per-process CPU history is preserved inside `ProcessMonitor`.
-- Per-process history is cleaned up automatically when a PID disappears, so the
-  internal tracking maps do not grow indefinitely.
+```powershell
+cmake -S . -B build
+cmake --build build --config Debug
+```
 
-## Alert Types
+Run the monitor:
 
-### System alerts
+```powershell
+.\build\Debug\SystemResourceMonitor.exe
+```
 
-System alerts are handled by the global anomaly detector and can flag:
+Stop it with `Ctrl+C`.
 
-- CPU threshold breaches
-- RAM threshold breaches
-- CPU spikes
-- RAM spikes
-- CPU leak/trend behavior
-- RAM leak/trend behavior
+## Tests
 
-### Process alerts
+Unit tests use Catch2. `BUILD_TESTING` is intentionally `OFF` by default, but CI
+enables it explicitly.
 
-Process alerts are handled inside `ProcessMonitor` and can flag:
+```powershell
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build --config Debug
+ctest --test-dir build -C Debug --output-on-failure
+```
 
-- CPU spikes for individual processes
-- RAM leak patterns for individual processes when:
-  - RAM increases consistently across the configured history window
-  - Average growth exceeds the configured leak threshold
-
-Process-specific alerts include the PID, process name, metric type, and value
-inside the alert message while keeping the CSV alert schema consistent.
-
-## Logging
-
-The logger now writes to three separate files:
-
-### `logs/system_log.csv`
-
-System-wide metrics for each refresh:
-
-- CPU%
-- RAM%
-- RAM used bytes
-
-### `logs/process_log.csv`
-
-Process snapshots for each refresh:
-
-- Category (`TOP_CPU` or `TOP_RAM`)
-- Rank
-- Process name
-- PID
-- CPU%
-- RAM bytes
-- RAM MB
-
-### `logs/alert_log.csv`
-
-All alerts with a consistent schema:
-
-- Metric
-- Type
-- Severity
-- Value
-- Reference
-- Message
-
-### `dashboard/latest_snapshot.json`
-
-The latest full `SystemSnapshot` serialized as JSON for the dashboard frontend:
-
-- CPU percentage
-- RAM percentage
-- Memory details
-- Process list
-- Alert list
+GitHub Actions runs the same Debug configuration on Windows.
 
 ## Configuration
 
-Runtime configuration lives in [config.json](C:/Code/projects/system-resource-monitor/config.json).
+Runtime configuration lives in `config.json`.
 
-Current configuration fields:
+Supported fields:
 
 - `thresholds.cpu`
 - `thresholds.ram`
@@ -162,82 +98,51 @@ Example:
 }
 ```
 
-## Build
+`logFile` must resolve to a file under the runtime `logs/` directory. The logger
+derives `process_log.csv` and `alert_log.csv` beside that system log.
 
-Requirements:
+## Dashboard
 
-- Windows
-- CMake 3.16+
-- A C++17-capable compiler
+The dashboard is a static page in `dashboard/`. It reads
+`dashboard/latest_snapshot.json`, which the monitor refreshes each sample.
 
-Build commands:
-
-```powershell
-cmake -S . -B build
-cmake --build build
-```
-
-## Run
-
-After building:
-
-```powershell
-.\build\SystemResourceMonitor.exe
-```
-
-Stop the monitor with `Ctrl+C`.
-
-### Dashboard
-
-The project includes a static dashboard in `dashboard/` that reads
-`dashboard/latest_snapshot.json`.
-
-Serve the repository root with a lightweight static server:
+Serve the repository root with a simple static server:
 
 ```powershell
 python -m http.server
 ```
 
-Then open:
+Open:
 
 ```text
 http://localhost:8000/dashboard/
 ```
 
-## Project Structure
+## Alerts
 
-- `src/` application source files
-- `include/` headers
-- `dashboard/` static web dashboard assets
-- `tests/` test-related files
-- `logs/` generated runtime logs
-- `external/json/` bundled JSON dependency
-- `config.json` runtime configuration
+Console alerts are always enabled. External alert handlers are enabled by
+environment variables:
 
-## Implementation Overview
+- `SYSTEM_MONITOR_WEBHOOK_URL`: HTTPS webhook endpoint for JSON alert payloads
+- `SYSTEM_MONITOR_EMAIL_TO`: mock email recipient printed to stderr
 
-- `SystemMonitor` orchestrates the main monitoring loop and builds a
-  `SystemSnapshot` each refresh.
-- `CpuMonitor` and `MemoryMonitor` collect system-wide metrics.
-- `ProcessMonitor` collects process snapshots and process-specific anomalies.
-- `AnomalyDetector` handles global CPU/RAM anomaly detection only.
-- `OutputHandler` implementations fan snapshots out to console, CSV, and JSON
-  outputs.
-- `AlertHandler` implementations deliver warning/critical alerts externally,
-  such as webhooks or mock email notifications.
-- `Logger` writes system metrics, process snapshots, and alerts to separate CSV
-  files for the CSV output handler.
-- `ConfigManager` loads thresholds and history settings from `config.json`.
+Webhook URLs must use HTTPS. Invalid webhook configuration fails at startup.
+External alert delivery is non-blocking for the sampling loop; alerts can be
+dropped locally if the bounded queue is full.
 
-## Status
+## Robustness Contracts
 
-The project currently compiles successfully in the existing workspace build
-setup and reflects the current implementation, including:
+- Missing CPU or RAM measurements are represented with `std::optional`.
+- Missing measurements are not treated as `0`.
+- Console output shows missing measurements as `N/A`.
+- JSON output writes missing measurements as `null`.
+- Anomaly detection does not alert on missing measurements.
+- CSV writes are checked and flushed after each snapshot.
+- Only one monitor instance is supported; a second instance exits with an error.
 
-- split CSV logging
-- process table output
-- JSON dashboard snapshot publishing
-- output handler architecture
-- alert handler integration
-- per-process CPU spike detection
-- per-process RAM leak detection
+## Known Constraints
+
+- Windows-only implementation.
+- The email handler is a mock transport.
+- Multiple concurrent monitor instances are intentionally blocked.
+- Dashboard schema and CSV column layout are kept stable for this version.

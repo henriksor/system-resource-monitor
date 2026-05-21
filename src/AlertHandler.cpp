@@ -1,6 +1,7 @@
 #include "AlertHandler.h"
 
 #include <iostream>
+#include <stdexcept>
 #include <sstream>
 #include <utility>
 #include <windows.h>
@@ -131,11 +132,48 @@ public:
 private:
     HINTERNET handle = nullptr;
 };
+
+void validateWebhookUrl(const std::string& webhookUrl)
+{
+    const std::wstring wideUrl = utf8ToWide(webhookUrl);
+    if (wideUrl.empty())
+    {
+        throw std::runtime_error("Webhook URL is not valid UTF-8.");
+    }
+
+    URL_COMPONENTS components{};
+    components.dwStructSize = sizeof(components);
+    components.dwSchemeLength = static_cast<DWORD>(-1);
+    components.dwHostNameLength = static_cast<DWORD>(-1);
+    components.dwUrlPathLength = static_cast<DWORD>(-1);
+    components.dwExtraInfoLength = static_cast<DWORD>(-1);
+
+    if (!WinHttpCrackUrl(
+            wideUrl.c_str(),
+            static_cast<DWORD>(wideUrl.size()),
+            0,
+            &components
+        ))
+    {
+        throw std::runtime_error("Webhook URL could not be parsed.");
+    }
+
+    if (components.nScheme != INTERNET_SCHEME_HTTPS)
+    {
+        throw std::runtime_error("Webhook URL must use HTTPS.");
+    }
+
+    if (components.dwHostNameLength == 0)
+    {
+        throw std::runtime_error("Webhook URL must include a host.");
+    }
+}
 } // namespace
 
 WebhookAlertHandler::WebhookAlertHandler(std::string webhookUrl)
     : webhookUrl(std::move(webhookUrl))
 {
+    validateWebhookUrl(this->webhookUrl);
 }
 
 std::string WebhookAlertHandler::buildRequestBody(const Alert& alert) const
@@ -194,8 +232,13 @@ void WebhookAlertHandler::handle(const Alert& alert)
         path.append(components.lpszExtraInfo, components.dwExtraInfoLength);
     }
 
-    const bool useTls = components.nScheme == INTERNET_SCHEME_HTTPS;
-    const DWORD requestFlags = useTls ? WINHTTP_FLAG_SECURE : 0;
+    if (components.nScheme != INTERNET_SCHEME_HTTPS)
+    {
+        std::cerr << "Webhook alert skipped: webhook URL must use HTTPS.\n";
+        throw std::runtime_error("Webhook alert failed: URL must use HTTPS.");
+    }
+
+    const DWORD requestFlags = WINHTTP_FLAG_SECURE;
     const std::string body = buildRequestBody(alert);
     const std::wstring headers =
         L"Content-Type: application/json\r\n";
@@ -310,8 +353,6 @@ EmailAlertHandler::EmailAlertHandler(std::string recipient)
 
 void EmailAlertHandler::handle(const Alert& alert)
 {
-    // This mock transport keeps the alert pipeline realistic without
-    // introducing SMTP/session management into the monitoring core.
     std::cerr << "Mock email alert to " << recipient
               << ": [" << severityToString(alert.severity)
               << "] " << alert.message << "\n";

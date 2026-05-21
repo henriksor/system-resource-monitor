@@ -94,12 +94,25 @@ std::string getEnvironmentVariable(const char* name)
     const char* value = std::getenv(name);
     return value != nullptr ? value : "";
 }
+
+const char* severityName(Severity severity)
+{
+    switch (severity)
+    {
+        case Severity::Info:
+            return "Info";
+        case Severity::Warning:
+            return "Warning";
+        case Severity::Critical:
+            return "Critical";
+    }
+
+    return "Unknown";
+}
 } // namespace
 
-// pointer used for Ctrl+C handling
 static SystemMonitor* instance = nullptr;
 
-// Windows console signal handler
 BOOL WINAPI consoleHandler(DWORD signal)
 {
     if (signal == CTRL_C_EVENT && instance)
@@ -120,6 +133,32 @@ void SystemMonitor::warmUp()
 void SystemMonitor::stop()
 {
     running = false;
+}
+
+HANDLE SystemMonitor::acquireSingleInstanceLock()
+{
+    HANDLE mutex = CreateMutexW(
+        nullptr,
+        TRUE,
+        L"Local\\SystemResourceMonitor.SingleInstance"
+    );
+
+    if (mutex == nullptr)
+    {
+        throw std::runtime_error(
+            "Could not create single-instance mutex"
+        );
+    }
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS)
+    {
+        CloseHandle(mutex);
+        throw std::runtime_error(
+            "Another SystemResourceMonitor instance is already running"
+        );
+    }
+
+    return mutex;
 }
 
 void SystemMonitor::launchAlertTask(const Alert& alert, AlertHandler* handler)
@@ -152,45 +191,71 @@ void SystemMonitor::dispatchAlerts(const SystemSnapshot& snapshot)
 
             if (alertTasks.size() >= MAX_ALERT_TASKS)
             {
-                if (alert.severity == Severity::Critical)
-                {
-                    try
-                    {
-                        alertHandler->handle(alert);
-                    }
-                    catch (const std::exception& ex)
-                    {
-                        std::cerr << "Alert handler failed: "
-                                  << ex.what() << "\n";
-                    }
-                    catch (...)
-                    {
-                        std::cerr
-                            << "Alert handler failed with an unknown error.\n";
-                    }
-                }
-                else
-                {
-                    if (pendingAlerts.size() >= MAX_PENDING_ALERTS)
-                    {
-                        pendingAlerts.pop_front();
-                        std::cerr
-                            << "[ALERT] Dropped oldest pending warning due to "
-                               "queue limit\n";
-                    }
-
-                    pendingAlerts.push_back(PendingAlert{
-                        alert,
-                        alertHandler.get()
-                    });
-                }
-
+                enqueuePendingAlert(alert, alertHandler.get());
                 continue;
             }
 
             launchAlertTask(alert, alertHandler.get());
         }
     }
+}
+
+void SystemMonitor::enqueuePendingAlert(
+    const Alert& alert,
+    AlertHandler* handler
+)
+{
+    if (pendingAlerts.size() < MAX_PENDING_ALERTS)
+    {
+        pendingAlerts.push_back(PendingAlert{alert, handler});
+        return;
+    }
+
+    if (alert.severity == Severity::Critical)
+    {
+        // Critical alerts get the remaining queue capacity first, but the
+        // sampling loop must never block on external delivery.
+        const auto warningIt = std::find_if(
+            pendingAlerts.begin(),
+            pendingAlerts.end(),
+            [](const PendingAlert& pendingAlert)
+            {
+                return pendingAlert.alert.severity == Severity::Warning;
+            }
+        );
+
+        if (warningIt != pendingAlerts.end())
+        {
+            logDroppedAlert(
+                warningIt->alert,
+                "evicted by critical alert priority"
+            );
+            pendingAlerts.erase(warningIt);
+        }
+        else
+        {
+            logDroppedAlert(
+                pendingAlerts.front().alert,
+                "evicted oldest critical alert due to queue limit"
+            );
+            pendingAlerts.pop_front();
+        }
+
+        pendingAlerts.push_back(PendingAlert{alert, handler});
+        return;
+    }
+
+    logDroppedAlert(alert, "queue limit reached");
+}
+
+void SystemMonitor::logDroppedAlert(
+    const Alert& alert,
+    const std::string& reason
+) const
+{
+    std::cerr << "[ALERT] Dropped " << severityName(alert.severity)
+              << " alert for " << alert.metric
+              << ": " << reason << "\n";
 }
 
 void SystemMonitor::drainPendingAlerts()
@@ -293,8 +358,9 @@ SystemSnapshot SystemMonitor::collectSnapshot()
 }
 
 SystemMonitor::SystemMonitor()
-    : runtimeRoot(resolveRuntimeRoot()),
-      config((runtimeRoot / "config.json").string()),
+    : singleInstanceMutex(acquireSingleInstanceLock()),
+      runtimeRoot(resolveRuntimeRoot()),
+      config((runtimeRoot / "config.json").string(), runtimeRoot),
       processMonitor(
           config.cpuSpikeThreshold(),
           config.ramLeakThresholdMb(),
@@ -310,9 +376,7 @@ SystemMonitor::SystemMonitor()
           config.historySize()
       )
 {
-    const auto logPath = std::filesystem::path(config.logFile());
-    const auto resolvedLogPath =
-        logPath.is_absolute() ? logPath : runtimeRoot / logPath;
+    const auto resolvedLogPath = std::filesystem::path(config.logFile());
     const auto snapshotPath = runtimeRoot / "dashboard" / "latest_snapshot.json";
 
     // Register outputs centrally so collection stays independent of any
@@ -344,9 +408,17 @@ SystemMonitor::SystemMonitor()
     }
 }
 
+SystemMonitor::~SystemMonitor()
+{
+    if (singleInstanceMutex != nullptr)
+    {
+        CloseHandle(singleInstanceMutex);
+        singleInstanceMutex = nullptr;
+    }
+}
+
 void SystemMonitor::run()
 {
-    // Register Ctrl+C handler
     instance = this;
     SetConsoleCtrlHandler(consoleHandler, TRUE);
 

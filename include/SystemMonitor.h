@@ -14,15 +14,21 @@
 #include <filesystem>
 #include <future>
 #include <memory>
+#include <string>
 #include <vector>
+#include <windows.h>
 
 class SystemMonitor {
 public:
     SystemMonitor();
+    ~SystemMonitor();
+
     void run();
     void stop();
 
 private:
+    static HANDLE acquireSingleInstanceLock();
+
     void warmUp();
     SystemSnapshot collectSnapshot();
     void dispatchAlerts(const SystemSnapshot& snapshot);
@@ -30,6 +36,8 @@ private:
     void waitForAlertTasks();
     void launchAlertTask(const Alert& alert, AlertHandler* handler);
     void drainPendingAlerts();
+    void enqueuePendingAlert(const Alert& alert, AlertHandler* handler);
+    void logDroppedAlert(const Alert& alert, const std::string& reason) const;
 
     struct PendingAlert {
         Alert alert;
@@ -38,6 +46,7 @@ private:
 
     std::atomic<bool> running{true};
 
+    HANDLE singleInstanceMutex = nullptr;
     std::filesystem::path runtimeRoot;
     ConfigManager config;
     CpuMonitor cpu;
