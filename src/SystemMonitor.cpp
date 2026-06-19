@@ -377,7 +377,7 @@ SystemMonitor::SystemMonitor()
       )
 {
     const auto resolvedLogPath = std::filesystem::path(config.logFile());
-    const auto snapshotPath = runtimeRoot / "dashboard" / "latest_snapshot.json";
+    const auto snapshotPath = runtimeRoot / "logs" / "latest_snapshot.json";
 
     // Register outputs centrally so collection stays independent of any
     // specific presentation or integration target.
