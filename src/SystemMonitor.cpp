@@ -398,14 +398,6 @@ SystemMonitor::SystemMonitor()
         );
     }
 
-    const std::string emailRecipient =
-        getEnvironmentVariable("SYSTEM_MONITOR_EMAIL_TO");
-    if (!emailRecipient.empty())
-    {
-        alertHandlers.push_back(
-            std::make_unique<EmailAlertHandler>(emailRecipient)
-        );
-    }
 }
 
 SystemMonitor::~SystemMonitor()

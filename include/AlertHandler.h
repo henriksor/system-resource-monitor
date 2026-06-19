@@ -22,13 +22,3 @@ private:
 
     std::string webhookUrl;
 };
-
-class EmailAlertHandler : public AlertHandler {
-public:
-    explicit EmailAlertHandler(std::string recipient);
-
-    void handle(const Alert& alert) override;
-
-private:
-    std::string recipient;
-};

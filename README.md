@@ -17,7 +17,7 @@ as JSON.
   - `logs/alert_log.csv`
 - JSON snapshot:
   - `logs/latest_snapshot.json`
-- Optional external alert delivery through webhook or mock email handlers
+- Optional external alert delivery through webhook handlers
 - Single-instance runtime guard on Windows
 - Graceful shutdown with `Ctrl+C`
 
@@ -103,11 +103,10 @@ derives `process_log.csv` and `alert_log.csv` beside that system log.
 
 ## Alerts
 
-Console alerts are always enabled. External alert handlers are enabled by
-environment variables:
+Console alerts are always enabled. External webhook delivery is enabled by
+environment variable:
 
 - `SYSTEM_MONITOR_WEBHOOK_URL`: HTTPS webhook endpoint for JSON alert payloads
-- `SYSTEM_MONITOR_EMAIL_TO`: mock email recipient printed to stderr
 
 Webhook URLs must use HTTPS. Invalid webhook configuration fails at startup.
 External alert delivery is non-blocking for the sampling loop; alerts can be
@@ -127,6 +126,5 @@ dropped locally if the bounded queue is full.
 ## Known Constraints
 
 - Windows-only implementation.
-- The email handler is a mock transport.
 - Multiple concurrent monitor instances are intentionally blocked.
 - JSON snapshot schema and CSV column layout are kept stable for this version.

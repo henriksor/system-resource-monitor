@@ -345,15 +345,3 @@ void WebhookAlertHandler::handle(const Alert& alert)
         );
     }
 }
-
-EmailAlertHandler::EmailAlertHandler(std::string recipient)
-    : recipient(std::move(recipient))
-{
-}
-
-void EmailAlertHandler::handle(const Alert& alert)
-{
-    std::cerr << "Mock email alert to " << recipient
-              << ": [" << severityToString(alert.severity)
-              << "] " << alert.message << "\n";
-}
