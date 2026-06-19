@@ -3,7 +3,7 @@
 `SystemResourceMonitor` is a Windows-based C++17 monitoring tool. It samples
 system CPU and memory usage, collects process-level CPU/RAM data, detects
 system and process anomalies, writes CSV logs, and publishes the latest snapshot
-for the static dashboard.
+as JSON.
 
 ## Features
 
@@ -15,8 +15,8 @@ for the static dashboard.
   - `logs/system_log.csv`
   - `logs/process_log.csv`
   - `logs/alert_log.csv`
-- JSON dashboard snapshot:
-  - `dashboard/latest_snapshot.json`
+- JSON snapshot:
+  - `logs/latest_snapshot.json`
 - Optional external alert delivery through webhook or mock email handlers
 - Single-instance runtime guard on Windows
 - Graceful shutdown with `Ctrl+C`
@@ -101,23 +101,6 @@ Example:
 `logFile` must resolve to a file under the runtime `logs/` directory. The logger
 derives `process_log.csv` and `alert_log.csv` beside that system log.
 
-## Dashboard
-
-The dashboard is a static page in `dashboard/`. It reads
-`dashboard/latest_snapshot.json`, which the monitor refreshes each sample.
-
-Serve the repository root with a simple static server:
-
-```powershell
-python -m http.server
-```
-
-Open:
-
-```text
-http://localhost:8000/dashboard/
-```
-
 ## Alerts
 
 Console alerts are always enabled. External alert handlers are enabled by
@@ -139,10 +122,11 @@ dropped locally if the bounded queue is full.
 - Anomaly detection does not alert on missing measurements.
 - CSV writes are checked and flushed after each snapshot.
 - Only one monitor instance is supported; a second instance exits with an error.
+- The latest JSON snapshot is written to `logs/latest_snapshot.json`.
 
 ## Known Constraints
 
 - Windows-only implementation.
 - The email handler is a mock transport.
 - Multiple concurrent monitor instances are intentionally blocked.
-- Dashboard schema and CSV column layout are kept stable for this version.
+- JSON snapshot schema and CSV column layout are kept stable for this version.
